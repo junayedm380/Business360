@@ -86,10 +86,12 @@ fun GovernanceAndSystemScreen(
     onLogout: () -> Unit
 ) {
     val tabs = buildList {
-        add(strings.notifications)
-        if (session.has(AppPermission.MANAGE_TASKS)) add("Assign Tasks")
-        if (session.has(AppPermission.MANAGE_USERS)) add(strings.userManagement)
-        if (session.role == UserRole.SUPER_ADMIN || session.has(AppPermission.VIEW_AUDIT_LOGS)) add(strings.auditLogs)
+        if (session.isFullAdmin) {
+            add(strings.notifications)
+            if (session.has(AppPermission.MANAGE_TASKS)) add("Assign Tasks")
+            if (session.has(AppPermission.MANAGE_USERS)) add(strings.userManagement)
+            if (session.has(AppPermission.VIEW_AUDIT_LOGS)) add(strings.auditLogs)
+        }
         add(strings.settings)
     }
 
@@ -159,7 +161,7 @@ fun GovernanceAndSystemScreen(
                                         StatusChip(if (u.active) "ACTIVE" else "INACTIVE")
                                     }
                                 }
-                                if (u.id != session.id && (session.role == UserRole.SUPER_ADMIN || uRole.rank < session.role.rank)) {
+                                if (u.id != session.id && (session.isFullAdmin || uRole.rank < session.role.rank)) {
                                     IconButton(onClick = { editingUser = u }) {
                                         Icon(Icons.Filled.Edit, contentDescription = "Edit permissions")
                                     }
@@ -267,7 +269,7 @@ private fun CreateUserDialog(
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    val allowedRoles = UserRole.entries.filter { actor.role == UserRole.SUPER_ADMIN || it.rank < actor.role.rank }
+    val allowedRoles = UserRole.entries.filter { actor.isFullAdmin || it.rank < actor.role.rank }
     var selectedRole by remember { mutableStateOf(allowedRoles.lastOrNull() ?: UserRole.EMPLOYEE) }
 
     AlertDialog(
@@ -296,7 +298,7 @@ private fun EditUserPermissionsDialog(
     onDismiss: () -> Unit,
     onSave: (UserRole, Set<AppPermission>, Boolean) -> Unit
 ) {
-    val allowedRoles = UserRole.entries.filter { actor.role == UserRole.SUPER_ADMIN || it.rank < actor.role.rank }
+    val allowedRoles = UserRole.entries.filter { actor.isFullAdmin || it.rank < actor.role.rank }
     var role by remember { mutableStateOf(UserRole.fromString(target.role)) }
     var perms by remember { mutableStateOf(PermissionPolicy.parsePermissions(target.permissionsCsv, role)) }
     var active by remember { mutableStateOf(target.active) }
@@ -315,10 +317,10 @@ private fun EditUserPermissionsDialog(
                     FilterChip(selected = role == r, onClick = { role = r; perms = PermissionPolicy.defaultPermissionsFor(r) }, label = { Text(r.name) })
                 }
                 Text("Permissions", style = MaterialTheme.typography.labelMedium)
-                val editablePerms = if (role == UserRole.MODERATOR_MANAGER || role == UserRole.EMPLOYEE) {
-                    AppPermission.entries.filter { it !in PermissionPolicy.CONFIDENTIAL_FINANCIAL_PERMISSIONS && it != AppPermission.MANAGE_USERS && it != AppPermission.MANAGE_SETTINGS && it != AppPermission.VIEW_AUDIT_LOGS }
-                } else {
-                    AppPermission.entries
+                val editablePerms = when (role) {
+                    UserRole.EMPLOYEE -> PermissionPolicy.EMPLOYEE_ALLOWED_PERMISSIONS.toList()
+                    UserRole.MODERATOR_MANAGER -> PermissionPolicy.MODERATOR_ALLOWED_PERMISSIONS.toList()
+                    UserRole.ADMIN, UserRole.SUPER_ADMIN -> AppPermission.entries
                 }
                 editablePerms.forEach { perm ->
                     Row(verticalAlignment = Alignment.CenterVertically) {

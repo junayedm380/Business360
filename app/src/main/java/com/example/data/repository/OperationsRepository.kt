@@ -42,17 +42,71 @@ data class SaleItemRequest(
 class OperationsRepository(private val db: ErpDatabase) {
     private val dao = db.erpDao()
 
-    // --- Observers ---
+    // --- Observers (Role-Sanitized) ---
     fun observeProducts(): Flow<List<ProductEntity>> = dao.observeProducts()
-    fun observeModels(): Flow<List<ProductModelEntity>> = dao.observeModels()
-    fun observeBomItems(): Flow<List<BomItemEntity>> = dao.observeAllBomItems()
+
+    fun observeModelsSanitized(session: SessionUser): Flow<List<ProductModelEntity>> {
+        val canSeeCost = session.canViewCosting
+        val canSeeSellPrices = session.has(AppPermission.VIEW_UNIT_PRICES) || session.canViewFinancials
+        return dao.observeModels().map { list ->
+            list.map { m ->
+                m.copy(
+                    productionCost = if (canSeeCost) m.productionCost else 0.0,
+                    wholesalePrice = if (canSeeSellPrices) m.wholesalePrice else 0.0,
+                    retailPrice = if (canSeeSellPrices) m.retailPrice else 0.0
+                )
+            }
+        }
+    }
+
+    fun observeBomItems(session: SessionUser): Flow<List<BomItemEntity>> {
+        if (!session.canViewCosting) throw ErpSecurityException("BOM and production costing are restricted to Admin")
+        return dao.observeAllBomItems()
+    }
+
     fun observeWarehouses(): Flow<List<WarehouseEntity>> = dao.observeWarehouses()
-    fun observeRawMaterials(): Flow<List<RawMaterialEntity>> = dao.observeRawMaterials()
-    fun observeMaterialLedger(): Flow<List<MaterialLedgerEntity>> = dao.observeMaterialLedger()
-    fun observeProductionBatches(): Flow<List<ProductionBatchEntity>> = dao.observeProductionBatches()
-    fun observeInventoryBalances(): Flow<List<InventoryBalanceEntity>> = dao.observeInventoryBalances()
-    fun observeStockMovements(): Flow<List<StockMovementEntity>> = dao.observeStockMovements()
-    fun observeSalesReturns(): Flow<List<SalesReturnEntity>> = dao.observeSalesReturns()
+
+    fun observeRawMaterialsSanitized(session: SessionUser): Flow<List<RawMaterialEntity>> {
+        if (!session.has(AppPermission.VIEW_RAW_MATERIALS) && !session.isFullAdmin) {
+            throw ErpSecurityException("Raw material access denied")
+        }
+        val canSeePurchasePrice = session.canViewCosting || session.has(AppPermission.VIEW_PURCHASE_PRICES)
+        return dao.observeRawMaterials().map { list ->
+            if (canSeePurchasePrice) list else list.map { it.copy(purchasePrice = 0.0) }
+        }
+    }
+
+    fun observeMaterialLedger(session: SessionUser): Flow<List<MaterialLedgerEntity>> {
+        if (!session.isFullAdmin) throw ErpSecurityException("Material ledger is restricted to Admin")
+        return dao.observeMaterialLedger()
+    }
+
+    fun observeProductionBatchesSanitized(session: SessionUser): Flow<List<ProductionBatchEntity>> {
+        if (!session.has(AppPermission.VIEW_PRODUCTION)) {
+            throw ErpSecurityException("Production access denied")
+        }
+        return dao.observeProductionBatches().map { list ->
+            if (session.canViewCosting) list else list.map { it.sanitizeCosts() }
+        }
+    }
+
+    fun observeInventoryBalances(session: SessionUser): Flow<List<InventoryBalanceEntity>> {
+        if (!session.has(AppPermission.VIEW_INVENTORY)) throw ErpSecurityException("Inventory access denied")
+        return dao.observeInventoryBalances()
+    }
+
+    fun observeStockMovements(session: SessionUser): Flow<List<StockMovementEntity>> {
+        if (!session.has(AppPermission.VIEW_INVENTORY)) throw ErpSecurityException("Stock movement access denied")
+        return dao.observeStockMovements()
+    }
+
+    fun observeSalesReturns(session: SessionUser): Flow<List<SalesReturnEntity>> {
+        if (!session.has(AppPermission.MANAGE_RETURNS) && !session.isFullAdmin) {
+            throw ErpSecurityException("Sales returns access denied")
+        }
+        return dao.observeSalesReturns()
+    }
+
     fun observeAllSaleItems(): Flow<List<SaleItemEntity>> = dao.observeAllSaleItems()
 
     fun observeTasks(session: SessionUser): Flow<List<EmployeeTaskEntity>> =
@@ -82,7 +136,11 @@ class OperationsRepository(private val db: ErpDatabase) {
     }
 
     fun observeSalesSanitized(session: SessionUser): Flow<List<SaleSanitizedView>> {
+        if (!session.has(AppPermission.CREATE_SALES) && !session.canViewFinancials) {
+            throw ErpSecurityException("Sales access denied")
+        }
         val canSeePrices = session.has(AppPermission.VIEW_UNIT_PRICES) || session.canViewFinancials
+        val canSeePaymentsAndDue = session.canViewFinancials
         return combine(dao.observeSales(), dao.observeCustomers(), dao.observeAllSaleItems()) { sales, customers, items ->
             val customerNames = customers.associateBy({ it.id }, { it.name })
             val itemsBySale = items.groupBy { it.saleId }
@@ -101,8 +159,8 @@ class OperationsRepository(private val db: ErpDatabase) {
                     subtotal = if (canSeePrices) sale.subtotal else null,
                     discount = if (canSeePrices) sale.discount else null,
                     grandTotal = if (canSeePrices) sale.grandTotal else null,
-                    paidAmount = if (canSeePrices) sale.paidAmount else null,
-                    dueAmount = if (canSeePrices) sale.dueAmount else null
+                    paidAmount = if (canSeePaymentsAndDue) sale.paidAmount else null,
+                    dueAmount = if (canSeePaymentsAndDue) sale.dueAmount else null
                 )
             }
         }
@@ -173,6 +231,11 @@ class OperationsRepository(private val db: ErpDatabase) {
         require(productionCost >= 0 && wholesalePrice >= 0 && retailPrice >= 0) { "Prices cannot be negative" }
 
         val existing = existingId?.let { dao.getModelById(it) }
+        val effectiveCost = if (actor.canViewCosting) {
+            Formatters.roundMoney(productionCost)
+        } else {
+            existing?.productionCost ?: 0.0
+        }
         val model = ProductModelEntity(
             id = existing?.id ?: UUID.randomUUID().toString(),
             productId = productId,
@@ -180,7 +243,7 @@ class OperationsRepository(private val db: ErpDatabase) {
             modelCode = modelCode.trim().uppercase(),
             barcode = barcode.trim(),
             imageUri = imageUri.ifBlank { existing?.imageUri ?: "" },
-            productionCost = Formatters.roundMoney(productionCost),
+            productionCost = effectiveCost,
             wholesalePrice = Formatters.roundMoney(wholesalePrice),
             retailPrice = Formatters.roundMoney(retailPrice),
             minimumStock = Formatters.roundQty(minimumStock),
@@ -210,7 +273,7 @@ class OperationsRepository(private val db: ErpDatabase) {
                 )
             )
         }
-        Result.success(model)
+        Result.success(if (actor.canViewCosting) model else model.copy(productionCost = 0.0))
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -223,7 +286,9 @@ class OperationsRepository(private val db: ErpDatabase) {
         rawMaterialId: String,
         quantityPerUnit: Double
     ): Result<Unit> = try {
-        if (!actor.has(AppPermission.MANAGE_PRODUCTS)) throw ErpSecurityException("BOM permission required")
+        if (!actor.canViewCosting || !actor.has(AppPermission.MANAGE_PRODUCTS)) {
+            throw ErpSecurityException("BOM management is restricted to Admin")
+        }
         require(quantityPerUnit > 0) { "BOM quantity per unit must be greater than zero" }
         dao.upsertBomItem(BomItemEntity(modelId = modelId, rawMaterialId = rawMaterialId, quantityPerUnit = Formatters.roundQty(quantityPerUnit)))
         Result.success(Unit)
@@ -234,7 +299,9 @@ class OperationsRepository(private val db: ErpDatabase) {
     }
 
     suspend fun deleteBomItem(actor: SessionUser, bomId: String): Result<Unit> = try {
-        if (!actor.has(AppPermission.MANAGE_PRODUCTS)) throw ErpSecurityException("BOM permission required")
+        if (!actor.canViewCosting || !actor.has(AppPermission.MANAGE_PRODUCTS)) {
+            throw ErpSecurityException("BOM management is restricted to Admin")
+        }
         dao.deleteBomItem(bomId)
         Result.success(Unit)
     } catch (e: CancellationException) {
@@ -340,7 +407,11 @@ class OperationsRepository(private val db: ErpDatabase) {
                 estMaterialCost += item.quantityPerUnit * actualQty * mat.purchasePrice
             }
         }
-        val totalCost = Formatters.roundMoney(estMaterialCost + laborCost + machineCost + electricityCost + otherCost)
+        val effLabor = if (actor.canViewCosting) Formatters.roundMoney(laborCost.coerceAtLeast(0.0)) else 0.0
+        val effMachine = if (actor.canViewCosting) Formatters.roundMoney(machineCost.coerceAtLeast(0.0)) else 0.0
+        val effElec = if (actor.canViewCosting) Formatters.roundMoney(electricityCost.coerceAtLeast(0.0)) else 0.0
+        val effOther = if (actor.canViewCosting) Formatters.roundMoney(otherCost.coerceAtLeast(0.0)) else 0.0
+        val totalCost = Formatters.roundMoney(estMaterialCost + effLabor + effMachine + effElec + effOther)
         val batch = ProductionBatchEntity(
             batchNumber = "PB-${System.currentTimeMillis().toString().takeLast(6)}",
             productId = model.productId,
@@ -352,10 +423,10 @@ class OperationsRepository(private val db: ErpDatabase) {
             goodQty = goodQty,
             wastageQty = Formatters.roundQty(wastageQty),
             materialCost = Formatters.roundMoney(estMaterialCost),
-            laborCost = Formatters.roundMoney(laborCost),
-            machineCost = Formatters.roundMoney(machineCost),
-            electricityCost = Formatters.roundMoney(electricityCost),
-            otherCost = Formatters.roundMoney(otherCost),
+            laborCost = effLabor,
+            machineCost = effMachine,
+            electricityCost = effElec,
+            otherCost = effOther,
             totalCost = totalCost,
             status = "SUBMITTED",
             stockApplied = false,
@@ -366,7 +437,7 @@ class OperationsRepository(private val db: ErpDatabase) {
             dao.upsertProductionBatch(batch)
             dao.insertNotification(
                 NotificationEntity(
-                    targetAudience = "OPS_AND_ADMIN",
+                    targetAudience = "ADMIN_ONLY",
                     title = "Production Batch Submitted",
                     message = "Batch ${batch.batchNumber} for ${model.modelName} awaiting review (${Formatters.formatQty(batch.goodQty)} good).",
                     category = "PRODUCTION",
@@ -380,7 +451,87 @@ class OperationsRepository(private val db: ErpDatabase) {
                 )
             )
         }
-        Result.success(batch)
+        Result.success(if (actor.canViewCosting) batch else batch.sanitizeCosts())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun editProductionBatch(
+        actor: SessionUser,
+        batchId: String,
+        modelId: String,
+        warehouseId: String,
+        plannedQty: Double,
+        actualQty: Double,
+        rejectedQty: Double,
+        wastageQty: Double,
+        laborCost: Double,
+        machineCost: Double,
+        electricityCost: Double,
+        otherCost: Double,
+        notes: String
+    ): Result<ProductionBatchEntity> = try {
+        if (!actor.has(AppPermission.EDIT_PRODUCTION)) {
+            throw ErpSecurityException("Production edit permission required")
+        }
+        val existing = dao.getProductionBatchById(batchId) ?: throw IllegalArgumentException("Batch not found")
+        if (existing.status == "COMPLETED" || existing.stockApplied) {
+            throw IllegalStateException("Completed production batches cannot be edited")
+        }
+        val model = dao.getModelById(modelId) ?: throw IllegalArgumentException("Model not found")
+        require(plannedQty > 0 && actualQty >= 0 && rejectedQty >= 0) { "Invalid production quantities" }
+        require(rejectedQty <= actualQty) { "Rejected quantity cannot exceed actual production quantity" }
+        val goodQty = Formatters.roundQty(actualQty - rejectedQty)
+        val bom = dao.getBomForModel(modelId)
+        var estMaterialCost = 0.0
+        for (item in bom) {
+            val mat = dao.getRawMaterialById(item.rawMaterialId)
+            if (mat != null) {
+                estMaterialCost += item.quantityPerUnit * actualQty * mat.purchasePrice
+            }
+        }
+        val effLabor = if (actor.canViewCosting) Formatters.roundMoney(laborCost.coerceAtLeast(0.0)) else existing.laborCost
+        val effMachine = if (actor.canViewCosting) Formatters.roundMoney(machineCost.coerceAtLeast(0.0)) else existing.machineCost
+        val effElec = if (actor.canViewCosting) Formatters.roundMoney(electricityCost.coerceAtLeast(0.0)) else existing.electricityCost
+        val effOther = if (actor.canViewCosting) Formatters.roundMoney(otherCost.coerceAtLeast(0.0)) else existing.otherCost
+        val totalCost = Formatters.roundMoney(estMaterialCost + effLabor + effMachine + effElec + effOther)
+
+        val updated = existing.copy(
+            productId = model.productId,
+            modelId = modelId,
+            warehouseId = warehouseId,
+            plannedQty = Formatters.roundQty(plannedQty),
+            actualQty = Formatters.roundQty(actualQty),
+            rejectedQty = Formatters.roundQty(rejectedQty),
+            goodQty = goodQty,
+            wastageQty = Formatters.roundQty(wastageQty),
+            materialCost = Formatters.roundMoney(estMaterialCost),
+            laborCost = effLabor,
+            machineCost = effMachine,
+            electricityCost = effElec,
+            otherCost = effOther,
+            totalCost = totalCost,
+            notes = notes.trim(),
+            updatedAt = System.currentTimeMillis()
+        )
+        db.withTransaction {
+            dao.upsertProductionBatch(updated)
+            dao.insertAuditLog(
+                AuditLogEntity(
+                    userId = actor.id,
+                    userName = actor.fullName,
+                    userRole = actor.role.name,
+                    action = "EDIT_PRODUCTION",
+                    module = "PRODUCTION",
+                    recordId = updated.id,
+                    previousValue = "Planned=${existing.plannedQty}, Actual=${existing.actualQty}, Rej=${existing.rejectedQty}",
+                    newValue = "Planned=${updated.plannedQty}, Actual=${updated.actualQty}, Rej=${updated.rejectedQty}"
+                )
+            )
+        }
+        Result.success(if (actor.canViewCosting) updated else updated.sanitizeCosts())
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -393,8 +544,7 @@ class OperationsRepository(private val db: ErpDatabase) {
         targetStatus: String
     ): Result<ProductionBatchEntity> = try {
         val batch = dao.getProductionBatchById(batchId) ?: throw IllegalArgumentException("Batch not found")
-        val requiresApprovalPerm = targetStatus == "APPROVED" || targetStatus == "COMPLETED"
-        if (requiresApprovalPerm && !actor.has(AppPermission.APPROVE_PRODUCTION)) {
+        if (!actor.has(AppPermission.APPROVE_PRODUCTION)) {
             throw ErpSecurityException("Production approval permission required")
         }
         if (batch.status == "COMPLETED" || (targetStatus == "COMPLETED" && batch.stockApplied)) {
@@ -1166,4 +1316,13 @@ class OperationsRepository(private val db: ErpDatabase) {
         "NAGAD" -> "acct_nagad"
         else -> "acct_cash"
     }
+
+    private fun ProductionBatchEntity.sanitizeCosts(): ProductionBatchEntity = copy(
+        materialCost = 0.0,
+        laborCost = 0.0,
+        machineCost = 0.0,
+        electricityCost = 0.0,
+        otherCost = 0.0,
+        totalCost = 0.0
+    )
 }

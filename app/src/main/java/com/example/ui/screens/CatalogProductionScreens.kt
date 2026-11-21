@@ -86,9 +86,16 @@ fun CatalogProductionScreen(
     onDeleteBom: (String) -> Unit,
     onSaveRawMaterial: (String, String, String, String, Double, String, Double, Double) -> Unit,
     onCreateBatch: (String, String, Double, Double, Double, Double, Double, Double, Double, Double, String) -> Unit,
+    onEditBatch: (String, String, String, Double, Double, Double, Double, Double, Double, Double, Double, String) -> Unit,
     onAdvanceBatch: (String, String) -> Unit
 ) {
+    val tabs = buildList {
+        if (session.has(AppPermission.VIEW_PRODUCTION)) add("BATCHES")
+        if (session.has(AppPermission.VIEW_PRODUCTS)) add("CATALOG")
+        if (session.has(AppPermission.VIEW_RAW_MATERIALS)) add("RAW")
+    }
     var selectedTab by remember { mutableIntStateOf(0) }
+    val activeTab = tabs.getOrElse(selectedTab) { tabs.firstOrNull() ?: "BATCHES" }
     var showNewProductDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var showModelDialog by remember { mutableStateOf<ProductModelEntity?>(null) }
@@ -96,20 +103,28 @@ fun CatalogProductionScreen(
     var showBomDialogForModel by remember { mutableStateOf<ProductModelEntity?>(null) }
     var showRawDialog by remember { mutableStateOf(false) }
     var showBatchDialog by remember { mutableStateOf(false) }
+    var editingBatch by remember { mutableStateOf<ProductionBatchEntity?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        PrimaryTabRow(selectedTabIndex = selectedTab) {
-            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text(strings.productionBatches) })
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text(strings.productsAndModels) })
-            Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text(strings.rawMaterials) })
+        if (tabs.size > 1) {
+            PrimaryTabRow(selectedTabIndex = selectedTab.coerceAtMost(tabs.lastIndex)) {
+                tabs.forEachIndexed { idx, tabKey ->
+                    val title = when (tabKey) {
+                        "BATCHES" -> strings.productionBatches
+                        "CATALOG" -> strings.productsAndModels
+                        else -> strings.rawMaterials
+                    }
+                    Tab(selected = selectedTab == idx, onClick = { selectedTab = idx }, text = { Text(title) })
+                }
+            }
         }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            when (selectedTab) {
-                0 -> {
+            when (activeTab) {
+                "BATCHES" -> {
                     item {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             if (session.has(AppPermission.CREATE_PRODUCTION)) {
@@ -130,7 +145,12 @@ fun CatalogProductionScreen(
                     } else {
                         items(batches, key = { it.id }) { batch ->
                             val modelName = models.firstOrNull { it.id == batch.modelId }?.modelName ?: batch.modelId
-                            SectionCard(title = "${batch.batchNumber} • $modelName") {
+                            val canEditBatch = batch.status != "COMPLETED" && session.has(AppPermission.EDIT_PRODUCTION)
+                            SectionCard(
+                                title = "${batch.batchNumber} • $modelName",
+                                actionLabel = if (canEditBatch) "Edit" else null,
+                                onAction = if (canEditBatch) ({ editingBatch = batch }) else null
+                            ) {
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(Formatters.formatDate(batch.productionDate), style = MaterialTheme.typography.bodySmall)
                                     StatusChip(batch.status)
@@ -140,14 +160,17 @@ fun CatalogProductionScreen(
                                     "Planned: ${Formatters.formatQty(batch.plannedQty)} | Actual: ${Formatters.formatQty(batch.actualQty)} | Good: ${Formatters.formatQty(batch.goodQty)} | Rejected: ${Formatters.formatQty(batch.rejectedQty)}",
                                     style = MaterialTheme.typography.bodyMedium
                                 )
-                                if (session.canViewFinancials) {
+                                if (batch.notes.isNotBlank()) {
+                                    Text(batch.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                if (session.canViewCosting) {
                                     Text(
                                         "Total Cost: ${Formatters.formatTaka(batch.totalCost)} (Mat: ${Formatters.formatTaka(batch.materialCost)})",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.secondary
                                     )
                                 }
-                                if (batch.status != "COMPLETED") {
+                                if (batch.status != "COMPLETED" && session.has(AppPermission.APPROVE_PRODUCTION)) {
                                     Spacer(Modifier.height(10.dp))
                                     val nextStep = when (batch.status) {
                                         "DRAFT" -> "SUBMITTED"
@@ -156,7 +179,7 @@ fun CatalogProductionScreen(
                                         "APPROVED" -> "COMPLETED"
                                         else -> null
                                     }
-                                    if (nextStep != null && (nextStep == "REVIEWED" || session.has(AppPermission.APPROVE_PRODUCTION))) {
+                                    if (nextStep != null) {
                                         FilledTonalButton(onClick = { onAdvanceBatch(batch.id, nextStep) }) {
                                             Text("Advance to $nextStep")
                                         }
@@ -166,7 +189,7 @@ fun CatalogProductionScreen(
                         }
                     }
                 }
-                1 -> {
+                "CATALOG" -> {
                     item {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (session.has(AppPermission.MANAGE_PRODUCTS)) {
@@ -219,18 +242,30 @@ fun CatalogProductionScreen(
                                             }
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text("${m.modelName} [${m.modelCode}]", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-                                                if (session.has(AppPermission.VIEW_UNIT_PRICES) || session.canViewFinancials) {
+                                                if (session.canViewCosting) {
                                                     Text(
                                                         "Cost: ${Formatters.formatTaka(m.productionCost)} | Wholesale: ${Formatters.formatTaka(m.wholesalePrice)} | Retail: ${Formatters.formatTaka(m.retailPrice)}",
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = MaterialTheme.colorScheme.secondary
                                                     )
+                                                } else if (session.has(AppPermission.VIEW_UNIT_PRICES)) {
+                                                    Text(
+                                                        "Wholesale: ${Formatters.formatTaka(m.wholesalePrice)} | Retail: ${Formatters.formatTaka(m.retailPrice)}",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.secondary
+                                                    )
                                                 }
-                                                Text("BOM items: $bomCount • Min stock: ${Formatters.formatQty(m.minimumStock)}", style = MaterialTheme.typography.labelSmall)
+                                                if (session.canViewCosting) {
+                                                    Text("BOM items: $bomCount • Min stock: ${Formatters.formatQty(m.minimumStock)}", style = MaterialTheme.typography.labelSmall)
+                                                } else {
+                                                    Text("Min stock: ${Formatters.formatQty(m.minimumStock)}", style = MaterialTheme.typography.labelSmall)
+                                                }
                                             }
                                             if (session.has(AppPermission.MANAGE_PRODUCTS)) {
-                                                IconButton(onClick = { showBomDialogForModel = m }) {
-                                                    Icon(Icons.Filled.Build, contentDescription = "Configure BOM")
+                                                if (session.canViewCosting) {
+                                                    IconButton(onClick = { showBomDialogForModel = m }) {
+                                                        Icon(Icons.Filled.Build, contentDescription = "Configure BOM")
+                                                    }
                                                 }
                                                 TextButton(onClick = { showModelDialog = m }) {
                                                     Text("Edit")
@@ -243,7 +278,7 @@ fun CatalogProductionScreen(
                         }
                     }
                 }
-                2 -> {
+                "RAW" -> {
                     item {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             if (session.has(AppPermission.MANAGE_RAW_MATERIALS)) {
@@ -267,7 +302,7 @@ fun CatalogProductionScreen(
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
                                     )
                                 }
-                                if (session.canViewFinancials) {
+                                if (session.canViewCosting || session.has(AppPermission.VIEW_PURCHASE_PRICES)) {
                                     Text("Last Price: ${Formatters.formatTaka(mat.purchasePrice)} / ${mat.unit}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                                 }
                             }
@@ -295,6 +330,7 @@ fun CatalogProductionScreen(
 
     if (showNewModelDialog || showModelDialog != null) {
         ModelFormDialog(
+            session = session,
             existing = showModelDialog,
             products = products,
             onDismiss = { showNewModelDialog = false; showModelDialog = null },
@@ -307,14 +343,16 @@ fun CatalogProductionScreen(
     }
 
     showBomDialogForModel?.let { targetModel ->
-        BomConfigDialog(
-            model = targetModel,
-            bomItems = bomItems.filter { it.modelId == targetModel.id },
-            rawMaterials = rawMaterials,
-            onAddBom = { matId, qty -> onSaveBom(targetModel.id, matId, qty) },
-            onDeleteBom = onDeleteBom,
-            onDismiss = { showBomDialogForModel = null }
-        )
+        if (session.canViewCosting) {
+            BomConfigDialog(
+                model = targetModel,
+                bomItems = bomItems.filter { it.modelId == targetModel.id },
+                rawMaterials = rawMaterials,
+                onAddBom = { matId, qty -> onSaveBom(targetModel.id, matId, qty) },
+                onDeleteBom = onDeleteBom,
+                onDismiss = { showBomDialogForModel = null }
+            )
+        }
     }
 
     if (showRawDialog) {
@@ -324,14 +362,25 @@ fun CatalogProductionScreen(
         }
     }
 
-    if (showBatchDialog) {
+    if ((showBatchDialog || editingBatch != null) && models.isNotEmpty() && warehouses.isNotEmpty()) {
         ProductionBatchFormDialog(
+            session = session,
+            existing = editingBatch,
             models = models,
             warehouses = warehouses,
-            onDismiss = { showBatchDialog = false },
-            onSubmit = { mId, whId, planned, actual, rej, wast, labor, machine, elec, other, notes ->
-                onCreateBatch(mId, whId, planned, actual, rej, wast, labor, machine, elec, other, notes)
+            onDismiss = {
                 showBatchDialog = false
+                editingBatch = null
+            },
+            onSubmit = { mId, whId, planned, actual, rej, wast, labor, machine, elec, other, notes ->
+                val targetEdit = editingBatch
+                if (targetEdit != null) {
+                    onEditBatch(targetEdit.id, mId, whId, planned, actual, rej, wast, labor, machine, elec, other, notes)
+                } else {
+                    onCreateBatch(mId, whId, planned, actual, rej, wast, labor, machine, elec, other, notes)
+                }
+                showBatchDialog = false
+                editingBatch = null
             }
         )
     }
@@ -397,6 +446,7 @@ private fun ProductFormDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModelFormDialog(
+    session: SessionUser,
     existing: ProductModelEntity?,
     products: List<ProductEntity>,
     onDismiss: () -> Unit,
@@ -439,7 +489,9 @@ private fun ModelFormDialog(
                 OutlinedTextField(value = modelName, onValueChange = { modelName = it }, label = { Text("Model Name") }, singleLine = true)
                 OutlinedTextField(value = modelCode, onValueChange = { modelCode = it }, label = { Text("Model Code") }, singleLine = true)
                 OutlinedTextField(value = barcode, onValueChange = { barcode = it }, label = { Text("Barcode (optional)") }, singleLine = true)
-                OutlinedTextField(value = cost, onValueChange = { cost = it }, label = { Text("Production Cost (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                if (session.canViewCosting) {
+                    OutlinedTextField(value = cost, onValueChange = { cost = it }, label = { Text("Production Cost (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                }
                 OutlinedTextField(value = wholesale, onValueChange = { wholesale = it }, label = { Text("Wholesale Price (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                 OutlinedTextField(value = retail, onValueChange = { retail = it }, label = { Text("Retail Price (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                 OutlinedTextField(value = minStock, onValueChange = { minStock = it }, label = { Text("Minimum Stock") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
@@ -454,7 +506,8 @@ private fun ModelFormDialog(
             Button(onClick = {
                 onSave(
                     existing?.id, selectedProduct.id, modelName, modelCode, barcode,
-                    cost.toDoubleOrNull() ?: 0.0, wholesale.toDoubleOrNull() ?: 0.0,
+                    if (session.canViewCosting) (cost.toDoubleOrNull() ?: 0.0) else 0.0,
+                    wholesale.toDoubleOrNull() ?: 0.0,
                     retail.toDoubleOrNull() ?: 0.0, minStock.toDoubleOrNull() ?: 5.0, imageUri
                 )
             }) { Text("Save") }
@@ -559,28 +612,34 @@ private fun RawMaterialFormDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProductionBatchFormDialog(
+    session: SessionUser,
+    existing: ProductionBatchEntity?,
     models: List<ProductModelEntity>,
     warehouses: List<WarehouseEntity>,
     onDismiss: () -> Unit,
     onSubmit: (String, String, Double, Double, Double, Double, Double, Double, Double, Double, String) -> Unit
 ) {
-    var model by remember { mutableStateOf(models.first()) }
-    var wh by remember { mutableStateOf(warehouses.first()) }
+    var model by remember(existing?.id) {
+        mutableStateOf(models.firstOrNull { it.id == existing?.modelId } ?: models.first())
+    }
+    var wh by remember(existing?.id) {
+        mutableStateOf(warehouses.firstOrNull { it.id == existing?.warehouseId } ?: warehouses.first())
+    }
     var mExp by remember { mutableStateOf(false) }
     var wExp by remember { mutableStateOf(false) }
-    var planned by remember { mutableStateOf("100") }
-    var actual by remember { mutableStateOf("100") }
-    var rejected by remember { mutableStateOf("0") }
-    var wastage by remember { mutableStateOf("0") }
-    var labor by remember { mutableStateOf("0") }
-    var machine by remember { mutableStateOf("0") }
-    var electricity by remember { mutableStateOf("0") }
-    var other by remember { mutableStateOf("0") }
-    var notes by remember { mutableStateOf("") }
+    var planned by remember(existing?.id) { mutableStateOf(existing?.plannedQty?.toString() ?: "100") }
+    var actual by remember(existing?.id) { mutableStateOf(existing?.actualQty?.toString() ?: "100") }
+    var rejected by remember(existing?.id) { mutableStateOf(existing?.rejectedQty?.toString() ?: "0") }
+    var wastage by remember(existing?.id) { mutableStateOf(existing?.wastageQty?.toString() ?: "0") }
+    var labor by remember(existing?.id) { mutableStateOf(existing?.laborCost?.toString() ?: "0") }
+    var machine by remember(existing?.id) { mutableStateOf(existing?.machineCost?.toString() ?: "0") }
+    var electricity by remember(existing?.id) { mutableStateOf(existing?.electricityCost?.toString() ?: "0") }
+    var other by remember(existing?.id) { mutableStateOf(existing?.otherCost?.toString() ?: "0") }
+    var notes by remember(existing?.id) { mutableStateOf(existing?.notes ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Production Batch") },
+        title = { Text(if (existing == null) "New Production Batch" else "Edit ${existing.batchNumber}") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ExposedDropdownMenuBox(expanded = mExp, onExpandedChange = { mExp = !mExp }) {
@@ -595,26 +654,34 @@ private fun ProductionBatchFormDialog(
                         warehouses.forEach { w -> DropdownMenuItem(text = { Text(w.name) }, onClick = { wh = w; wExp = false }) }
                     }
                 }
-                OutlinedTextField(value = planned, onValueChange = { planned = it }, label = { Text("Planned Qty") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(value = actual, onValueChange = { actual = it }, label = { Text("Actual Produced Qty") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(value = rejected, onValueChange = { rejected = it }, label = { Text("Rejected Qty") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(value = wastage, onValueChange = { wastage = it }, label = { Text("Material Wastage Qty") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(value = labor, onValueChange = { labor = it }, label = { Text("Labor Cost (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(value = machine, onValueChange = { machine = it }, label = { Text("Machine Cost (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(value = electricity, onValueChange = { electricity = it }, label = { Text("Electricity Cost (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(value = other, onValueChange = { other = it }, label = { Text("Other Cost (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") })
+                OutlinedTextField(value = planned, onValueChange = { planned = it }, label = { Text("Planned Qty") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth().testTag("batch_planned_input"))
+                OutlinedTextField(value = actual, onValueChange = { actual = it }, label = { Text("Actual Produced Qty") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth().testTag("batch_actual_input"))
+                OutlinedTextField(value = rejected, onValueChange = { rejected = it }, label = { Text("Rejected Qty") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = wastage, onValueChange = { wastage = it }, label = { Text("Material Wastage Qty") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                if (session.canViewCosting) {
+                    OutlinedTextField(value = labor, onValueChange = { labor = it }, label = { Text("Labor Cost (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = machine, onValueChange = { machine = it }, label = { Text("Machine Cost (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = electricity, onValueChange = { electricity = it }, label = { Text("Electricity Cost (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = other, onValueChange = { other = it }, label = { Text("Other Cost (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                }
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = {
-            Button(onClick = {
-                onSubmit(
-                    model.id, wh.id, planned.toDoubleOrNull() ?: 0.0, actual.toDoubleOrNull() ?: 0.0,
-                    rejected.toDoubleOrNull() ?: 0.0, wastage.toDoubleOrNull() ?: 0.0,
-                    labor.toDoubleOrNull() ?: 0.0, machine.toDoubleOrNull() ?: 0.0,
-                    electricity.toDoubleOrNull() ?: 0.0, other.toDoubleOrNull() ?: 0.0, notes
-                )
-            }) { Text("Submit Batch") }
+            Button(
+                onClick = {
+                    onSubmit(
+                        model.id, wh.id, planned.toDoubleOrNull() ?: 0.0, actual.toDoubleOrNull() ?: 0.0,
+                        rejected.toDoubleOrNull() ?: 0.0, wastage.toDoubleOrNull() ?: 0.0,
+                        if (session.canViewCosting) (labor.toDoubleOrNull() ?: 0.0) else 0.0,
+                        if (session.canViewCosting) (machine.toDoubleOrNull() ?: 0.0) else 0.0,
+                        if (session.canViewCosting) (electricity.toDoubleOrNull() ?: 0.0) else 0.0,
+                        if (session.canViewCosting) (other.toDoubleOrNull() ?: 0.0) else 0.0,
+                        notes
+                    )
+                },
+                modifier = Modifier.testTag("save_batch_button")
+            ) { Text(if (existing == null) "Submit Batch" else "Save Changes") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )

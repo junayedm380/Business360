@@ -222,7 +222,7 @@ class AuthAndGovernanceRepository(private val db: ErpDatabase) {
         if (!actor.has(AppPermission.MANAGE_USERS)) {
             throw ErpSecurityException("Only authorized Super Admin/Admin can create users")
         }
-        if (actor.role != UserRole.SUPER_ADMIN && targetRole.rank >= actor.role.rank) {
+        if (!actor.isFullAdmin && targetRole.rank >= actor.role.rank) {
             throw ErpSecurityException("Cannot create an account with equal or higher authority")
         }
         require(fullName.isNotBlank()) { "Name is required" }
@@ -277,7 +277,7 @@ class AuthAndGovernanceRepository(private val db: ErpDatabase) {
         }
         val target = dao.getUserById(targetUserId) ?: throw IllegalArgumentException("User not found")
         val targetCurrentRole = UserRole.fromString(target.role)
-        if (actor.role != UserRole.SUPER_ADMIN &&
+        if (!actor.isFullAdmin &&
             (targetCurrentRole.rank >= actor.role.rank || newRole.rank >= actor.role.rank)
         ) {
             throw ErpSecurityException("Cannot alter a user with equal or higher role authority")
@@ -312,8 +312,8 @@ class AuthAndGovernanceRepository(private val db: ErpDatabase) {
     }
 
     fun observeAuditLogs(actor: SessionUser): Flow<List<AuditLogEntity>> {
-        if (actor.role != UserRole.SUPER_ADMIN && !actor.has(AppPermission.VIEW_AUDIT_LOGS)) {
-            throw ErpSecurityException("Audit logs are restricted to Super Admin")
+        if (!actor.isFullAdmin && !actor.has(AppPermission.VIEW_AUDIT_LOGS)) {
+            throw ErpSecurityException("Audit logs are restricted to Admin and Super Admin")
         }
         return dao.observeAuditLogs()
     }
@@ -321,13 +321,8 @@ class AuthAndGovernanceRepository(private val db: ErpDatabase) {
     fun observeNotifications(session: SessionUser): Flow<List<NotificationEntity>> =
         dao.observeAllNotifications().map { list ->
             list.filter { notif ->
-                when (notif.targetAudience) {
-                    "ADMIN_ONLY" -> session.role == UserRole.SUPER_ADMIN || session.role == UserRole.ADMIN
-                    "OPS_AND_ADMIN" -> true
-                    else -> notif.targetAudience == "USER:${session.id}" ||
-                        session.role == UserRole.SUPER_ADMIN ||
-                        session.role == UserRole.ADMIN
-                }
+                if (session.isFullAdmin) true
+                else notif.targetAudience == "USER:${session.id}"
             }
         }
 

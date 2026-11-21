@@ -19,7 +19,9 @@ enum class AppPermission {
     MANAGE_RAW_MATERIALS,
     VIEW_PRODUCTION,
     CREATE_PRODUCTION,
+    EDIT_PRODUCTION,
     APPROVE_PRODUCTION,
+    VIEW_COSTING,
     VIEW_INVENTORY,
     ADJUST_STOCK,
     TRANSFER_STOCK,
@@ -31,6 +33,7 @@ enum class AppPermission {
     DISPATCH_DELIVERY,
     MANAGE_RETURNS,
     VIEW_UNIT_PRICES,
+    VIEW_PURCHASE_PRICES,
     SUBMIT_PAYMENT_COLLECTION,
     APPROVE_PAYMENTS,
     VIEW_SUPPLIERS,
@@ -54,12 +57,15 @@ enum class AppPermission {
 object PermissionPolicy {
 
     /**
-     * Confidential financial permissions strictly forbidden by default for Moderator/Manager and Employee.
+     * Confidential financial & costing permissions strictly forbidden for Moderator/Manager and Employee.
      */
     val CONFIDENTIAL_FINANCIAL_PERMISSIONS: Set<AppPermission> = setOf(
+        AppPermission.VIEW_COSTING,
         AppPermission.VIEW_CUSTOMER_LEDGER,
+        AppPermission.SUBMIT_PAYMENT_COLLECTION,
         AppPermission.APPROVE_PAYMENTS,
         AppPermission.VIEW_SUPPLIER_LEDGER,
+        AppPermission.SUBMIT_EXPENSE,
         AppPermission.VIEW_EXPENSE_TOTALS,
         AppPermission.APPROVE_EXPENSES,
         AppPermission.VIEW_CASH_BANK,
@@ -69,69 +75,56 @@ object PermissionPolicy {
         AppPermission.DAILY_CLOSING
     )
 
+    val EMPLOYEE_ALLOWED_PERMISSIONS: Set<AppPermission> = setOf(
+        AppPermission.VIEW_PRODUCTION,
+        AppPermission.CREATE_PRODUCTION,
+        AppPermission.EDIT_PRODUCTION
+    )
+
+    val MODERATOR_ALLOWED_PERMISSIONS: Set<AppPermission> = setOf(
+        AppPermission.VIEW_PRODUCTION,
+        AppPermission.CREATE_PRODUCTION,
+        AppPermission.EDIT_PRODUCTION,
+        AppPermission.VIEW_PRODUCTS,
+        AppPermission.MANAGE_PRODUCTS,
+        AppPermission.VIEW_RAW_MATERIALS,
+        AppPermission.MANAGE_RAW_MATERIALS,
+        AppPermission.VIEW_CUSTOMERS,
+        AppPermission.VIEW_CUSTOMER_CONTACT,
+        AppPermission.MANAGE_CUSTOMERS,
+        AppPermission.CREATE_SALES,
+        AppPermission.VIEW_UNIT_PRICES,
+        AppPermission.VIEW_SUPPLIERS,
+        AppPermission.MANAGE_PURCHASES,
+        AppPermission.VIEW_PURCHASE_PRICES
+    )
+
     fun defaultPermissionsFor(role: UserRole): Set<AppPermission> = when (role) {
-        UserRole.SUPER_ADMIN -> AppPermission.entries.toSet()
-
-        UserRole.ADMIN -> AppPermission.entries.toSet() - setOf(
-            AppPermission.VIEW_AUDIT_LOGS
-        )
-
-        UserRole.MODERATOR_MANAGER -> setOf(
-            AppPermission.VIEW_PRODUCTS,
-            AppPermission.MANAGE_PRODUCTS,
-            AppPermission.VIEW_RAW_MATERIALS,
-            AppPermission.MANAGE_RAW_MATERIALS,
-            AppPermission.VIEW_PRODUCTION,
-            AppPermission.CREATE_PRODUCTION,
-            AppPermission.APPROVE_PRODUCTION,
-            AppPermission.VIEW_INVENTORY,
-            AppPermission.TRANSFER_STOCK,
-            AppPermission.ADJUST_STOCK,
-            AppPermission.VIEW_CUSTOMERS,
-            AppPermission.VIEW_CUSTOMER_CONTACT,
-            AppPermission.CREATE_SALES,
-            AppPermission.DISPATCH_DELIVERY,
-            AppPermission.MANAGE_RETURNS,
-            AppPermission.VIEW_SUPPLIERS,
-            AppPermission.MANAGE_PURCHASES,
-            AppPermission.SUBMIT_EXPENSE,
-            AppPermission.MANAGE_TASKS,
-            AppPermission.EXPORT_REPORTS
-        )
-
-        UserRole.EMPLOYEE -> setOf(
-            AppPermission.VIEW_PRODUCTS,
-            AppPermission.VIEW_RAW_MATERIALS,
-            AppPermission.VIEW_PRODUCTION,
-            AppPermission.CREATE_PRODUCTION,
-            AppPermission.VIEW_INVENTORY,
-            AppPermission.VIEW_CUSTOMERS,
-            AppPermission.CREATE_SALES,
-            AppPermission.DISPATCH_DELIVERY,
-            AppPermission.SUBMIT_PAYMENT_COLLECTION,
-            AppPermission.SUBMIT_EXPENSE
-        )
+        UserRole.SUPER_ADMIN, UserRole.ADMIN -> AppPermission.entries.toSet()
+        UserRole.MODERATOR_MANAGER -> MODERATOR_ALLOWED_PERMISSIONS
+        UserRole.EMPLOYEE -> EMPLOYEE_ALLOWED_PERMISSIONS
     }
 
     fun parsePermissions(csv: String, role: UserRole): Set<AppPermission> {
-        if (role == UserRole.SUPER_ADMIN) return AppPermission.entries.toSet()
+        if (role == UserRole.SUPER_ADMIN || role == UserRole.ADMIN) {
+            return AppPermission.entries.toSet()
+        }
         if (csv.isBlank()) return emptySet()
         val parsed = csv.split(",")
             .mapNotNull { token -> AppPermission.entries.firstOrNull { it.name == token.trim() } }
             .toSet()
-        // Enforce strict confidentiality invariant: Moderator/Manager and Employee cannot receive confidential financial permissions
-        return if (role == UserRole.MODERATOR_MANAGER || role == UserRole.EMPLOYEE) {
-            parsed - CONFIDENTIAL_FINANCIAL_PERMISSIONS - setOf(AppPermission.MANAGE_USERS, AppPermission.MANAGE_SETTINGS, AppPermission.VIEW_AUDIT_LOGS)
-        } else {
-            parsed
+        return when (role) {
+            UserRole.MODERATOR_MANAGER -> parsed.intersect(MODERATOR_ALLOWED_PERMISSIONS)
+            UserRole.EMPLOYEE -> parsed.intersect(EMPLOYEE_ALLOWED_PERMISSIONS)
+            UserRole.SUPER_ADMIN, UserRole.ADMIN -> AppPermission.entries.toSet()
         }
     }
 
     fun serializePermissions(perms: Set<AppPermission>, role: UserRole): String {
-        val sanitized = if (role == UserRole.MODERATOR_MANAGER || role == UserRole.EMPLOYEE) {
-            perms - CONFIDENTIAL_FINANCIAL_PERMISSIONS - setOf(AppPermission.MANAGE_USERS, AppPermission.MANAGE_SETTINGS, AppPermission.VIEW_AUDIT_LOGS)
-        } else {
-            perms
+        val sanitized = when (role) {
+            UserRole.SUPER_ADMIN, UserRole.ADMIN -> AppPermission.entries.toSet()
+            UserRole.MODERATOR_MANAGER -> perms.intersect(MODERATOR_ALLOWED_PERMISSIONS)
+            UserRole.EMPLOYEE -> perms.intersect(EMPLOYEE_ALLOWED_PERMISSIONS)
         }
         return sanitized.joinToString(",") { it.name }
     }
@@ -145,10 +138,19 @@ data class SessionUser(
     val permissions: Set<AppPermission>,
     val active: Boolean
 ) {
+    val isFullAdmin: Boolean
+        get() = role == UserRole.SUPER_ADMIN || role == UserRole.ADMIN
+
     fun has(permission: AppPermission): Boolean =
-        role == UserRole.SUPER_ADMIN || permissions.contains(permission)
+        isFullAdmin || permissions.contains(permission)
 
     val canViewFinancials: Boolean
-        get() = role == UserRole.SUPER_ADMIN ||
-            (role == UserRole.ADMIN && (has(AppPermission.VIEW_PROFIT_LOSS) || has(AppPermission.VIEW_ACCOUNTING) || has(AppPermission.VIEW_CASH_BANK)))
+        get() = isFullAdmin ||
+            (has(AppPermission.VIEW_PROFIT_LOSS) || has(AppPermission.VIEW_ACCOUNTING) || has(AppPermission.VIEW_CASH_BANK))
+
+    val canViewCosting: Boolean
+        get() = isFullAdmin || has(AppPermission.VIEW_COSTING)
+
+    val canViewProfit: Boolean
+        get() = isFullAdmin || has(AppPermission.VIEW_PROFIT_LOSS)
 }

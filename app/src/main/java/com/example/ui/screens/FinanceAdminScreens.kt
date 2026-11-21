@@ -197,7 +197,7 @@ fun FinanceAndOpsScreen(
                                 }
                                 if (sub.status == "PENDING" && session.has(AppPermission.APPROVE_PAYMENTS)) {
                                     Spacer(Modifier.height(10.dp))
-                                    val isSelfSubmission = sub.submittedByUserId == session.id && session.role != com.example.domain.UserRole.SUPER_ADMIN
+                                    val isSelfSubmission = sub.submittedByUserId == session.id && !session.isFullAdmin
                                     if (isSelfSubmission) {
                                         RestrictedBanner("Self-approval disabled: another Admin must approve your submission.")
                                     } else {
@@ -250,7 +250,9 @@ fun FinanceAndOpsScreen(
                                 StatusChip(po.status)
                             }
                             if (session.canViewFinancials) {
-                                Text("Total: ${Formatters.formatTaka(po.totalAmount)} | Payable: ${Formatters.formatTaka(po.payableAmount)}", style = MaterialTheme.typography.bodySmall)
+                                Text("Unit: ${Formatters.formatTaka(po.unitPrice)} | Total: ${Formatters.formatTaka(po.totalAmount)} | Payable: ${Formatters.formatTaka(po.payableAmount)}", style = MaterialTheme.typography.bodySmall)
+                            } else if (session.has(AppPermission.VIEW_PURCHASE_PRICES)) {
+                                Text("Unit: ${Formatters.formatTaka(po.unitPrice)} | Total: ${Formatters.formatTaka(po.totalAmount)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                             }
                             if (po.status != "RECEIVED" && session.has(AppPermission.MANAGE_PURCHASES)) {
                                 Spacer(Modifier.height(6.dp))
@@ -594,8 +596,10 @@ private fun PurchaseDialog(
                     ExposedDropdownMenu(expanded = mExp, onDismissRequest = { mExp = false }) { materials.forEach { m -> DropdownMenuItem(text = { Text("${m.name} (${m.unit})") }, onClick = { mat = m; price = m.purchasePrice.toString(); mExp = false }) } }
                 }
                 OutlinedTextField(value = qty, onValueChange = { qty = it }, label = { Text("Quantity") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                if (session.canViewFinancials) {
+                if (session.has(AppPermission.VIEW_PURCHASE_PRICES) || session.canViewFinancials) {
                     OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Unit Price (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                }
+                if (session.canViewFinancials) {
                     OutlinedTextField(value = paid, onValueChange = { paid = it }, label = { Text("Paid Amount (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -125,16 +125,12 @@ fun RoleBasedDashboardScreen(
         if (session.has(AppPermission.VIEW_INVENTORY)) {
             add(QuickModuleShortcut("inventory", strings.navInventory, Icons.Filled.Inventory2, CyanAccent))
         }
-        if (session.has(AppPermission.CREATE_SALES) || session.has(AppPermission.VIEW_CUSTOMERS)) {
+        if (session.has(AppPermission.CREATE_SALES)) {
             add(QuickModuleShortcut("sales", strings.navSales, Icons.Filled.PointOfSale, IndigoAccent))
         }
-        if (session.has(AppPermission.SUBMIT_PAYMENT_COLLECTION) ||
-            session.has(AppPermission.APPROVE_PAYMENTS) ||
-            session.has(AppPermission.VIEW_SUPPLIERS) ||
-            session.has(AppPermission.SUBMIT_EXPENSE) ||
-            session.canViewFinancials
-        ) {
-            add(QuickModuleShortcut("finance", strings.navFinance, Icons.Filled.AccountBalance, EmeraldSecondary))
+        if (session.has(AppPermission.MANAGE_PURCHASES) || session.canViewFinancials) {
+            val finLabel = if (!session.canViewFinancials && session.has(AppPermission.MANAGE_PURCHASES)) "Purchases" else strings.navFinance
+            add(QuickModuleShortcut("finance", finLabel, Icons.Filled.AccountBalance, EmeraldSecondary))
         }
     }
 
@@ -203,8 +199,8 @@ fun RoleBasedDashboardScreen(
             }
         }
 
-        // --- 1. SUPER ADMIN & AUTHORIZED ADMIN FINANCIAL OVERVIEW ---
-        if ((session.role == UserRole.SUPER_ADMIN || session.role == UserRole.ADMIN) && fin != null) {
+        // --- 1. SUPER ADMIN & ADMIN FULL FINANCIAL OVERVIEW ---
+        if (session.isFullAdmin && fin != null) {
             item {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth().testTag("admin_financial_grid"),
@@ -262,7 +258,7 @@ fun RoleBasedDashboardScreen(
             }
         }
 
-        // --- 2. MODERATOR / MANAGER STRICTLY OPERATIONAL DASHBOARD ---
+        // --- 2. MODERATOR / MANAGER DASHBOARD (NO PROFIT OR COSTING) ---
         if (session.role == UserRole.MODERATOR_MANAGER) {
             item {
                 RestrictedBanner(
@@ -270,10 +266,38 @@ fun RoleBasedDashboardScreen(
                     modifier = Modifier.testTag("moderator_restricted_banner")
                 )
             }
+            if (ops != null) {
+                item {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().testTag("operational_kpi_grid"),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        maxItemsInEachRow = 2
+                    ) {
+                        KpiTile(strings.todayProduction, Formatters.formatQty(ops.todayProductionQty, "u"), Icons.Filled.Factory, EmeraldSecondary, modifier = Modifier.weight(1f))
+                        KpiTile(strings.monthlyProduction, Formatters.formatQty(ops.monthlyProductionQty, "u"), Icons.Filled.PrecisionManufacturing, VioletAccent, modifier = Modifier.weight(1f))
+                        KpiTile(strings.goodProducts, Formatters.formatQty(ops.totalGoodQty, "u"), Icons.Filled.CheckCircle, SuccessGreen, modifier = Modifier.weight(1f))
+                        KpiTile("Today's Orders", ops.todayOrdersCount.toString(), Icons.Filled.PointOfSale, IndigoAccent, modifier = Modifier.weight(1f))
+                    }
+                }
+                item {
+                    SectionCard(
+                        title = "${strings.productionBatches} (${strings.goodProducts} vs ${strings.rejectedProducts})",
+                        accentColor = VioletAccent
+                    ) {
+                        SimpleBarChart(
+                            points = listOf(
+                                BarChartPoint(strings.goodProducts, ops.totalGoodQty, SuccessGreen),
+                                BarChartPoint(strings.rejectedProducts, ops.totalRejectedQty, RoseAccent)
+                            )
+                        )
+                    }
+                }
+            }
         }
 
-        // --- 3. OPERATIONAL SUMMARY (ALL AUTHORIZED ROLES, EXCLUDES FINANCIALS FOR MOD/EMPLOYEE) ---
-        if (ops != null && session.role != UserRole.EMPLOYEE) {
+        // --- 3. FULL OPERATIONAL SUMMARY FOR ADMIN / SUPER ADMIN ---
+        if (ops != null && session.isFullAdmin) {
             item {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth().testTag("operational_kpi_grid"),
@@ -294,7 +318,7 @@ fun RoleBasedDashboardScreen(
                 SectionCard(
                     title = "${strings.productionBatches} (${strings.goodProducts} vs ${strings.rejectedProducts})",
                     accentColor = VioletAccent,
-                    actionLabel = if (session.has(AppPermission.EXPORT_REPORTS)) strings.exportCsv else null,
+                    actionLabel = strings.exportCsv,
                     onAction = { onExportReport(ReportType.OPERATIONAL_PRODUCTION) }
                 ) {
                     SimpleBarChart(
@@ -308,71 +332,60 @@ fun RoleBasedDashboardScreen(
             }
         }
 
-        // --- 4. EMPLOYEE DEDICATED DASHBOARD ---
+        // --- 4. EMPLOYEE PRODUCTION-ONLY DASHBOARD ---
         if (session.role == UserRole.EMPLOYEE) {
             item {
                 RestrictedBanner(
-                    message = strings.restrictedNotice,
+                    message = "Employee access is limited to adding and editing production batches only.",
                     modifier = Modifier.testTag("employee_restricted_banner")
                 )
             }
             if (ops != null) {
                 item {
                     FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("employee_production_grid"),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         maxItemsInEachRow = 2
                     ) {
-                        KpiTile(strings.myTasks, ops.myPendingTasksCount.toString(), Icons.AutoMirrored.Filled.Assignment, IndigoAccent, modifier = Modifier.weight(1f))
-                        KpiTile(strings.pendingDeliveries, ops.pendingDeliveriesCount.toString(), Icons.Filled.LocalShipping, AmberTertiary, modifier = Modifier.weight(1f))
+                        KpiTile(strings.todayProduction, Formatters.formatQty(ops.todayProductionQty, "u"), Icons.Filled.Factory, EmeraldSecondary, modifier = Modifier.weight(1f))
+                        KpiTile(strings.monthlyProduction, Formatters.formatQty(ops.monthlyProductionQty, "u"), Icons.Filled.PrecisionManufacturing, VioletAccent, modifier = Modifier.weight(1f))
+                        KpiTile(strings.goodProducts, Formatters.formatQty(ops.totalGoodQty, "u"), Icons.Filled.CheckCircle, SuccessGreen, modifier = Modifier.weight(1f))
+                        KpiTile(strings.rejectedProducts, Formatters.formatQty(ops.totalRejectedQty, "u"), Icons.Filled.Warning, RoseAccent, modifier = Modifier.weight(1f))
                     }
                 }
             }
             item {
-                SectionCard(title = strings.quickActions, accentColor = CyanAccent) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                SectionCard(title = strings.quickActions, accentColor = VioletAccent) {
+                    Button(
+                        onClick = { onNavigateTab("production") },
+                        colors = ButtonDefaults.buttonColors(containerColor = VioletAccent),
+                        modifier = Modifier.fillMaxWidth().testTag("emp_quick_prod")
                     ) {
-                        if (session.has(AppPermission.CREATE_PRODUCTION)) {
-                            Button(
-                                onClick = { onNavigateTab("production") },
-                                colors = ButtonDefaults.buttonColors(containerColor = VioletAccent),
-                                modifier = Modifier.testTag("emp_quick_prod")
-                            ) {
-                                Text(strings.productionBatches)
-                            }
-                        }
-                        if (session.has(AppPermission.CREATE_SALES) || session.has(AppPermission.DISPATCH_DELIVERY)) {
-                            FilledTonalButton(onClick = { onNavigateTab("sales") }, modifier = Modifier.testTag("emp_quick_sales")) {
-                                Text(strings.wholesaleAndRetail)
-                            }
-                        }
-                        if (session.has(AppPermission.SUBMIT_PAYMENT_COLLECTION)) {
-                            OutlinedButton(onClick = { onNavigateTab("finance") }, modifier = Modifier.testTag("emp_quick_collect")) {
-                                Text(strings.paymentCollection)
-                            }
-                        }
+                        Icon(Icons.Filled.Factory, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(strings.productionBatches)
                     }
                 }
             }
-            item {
-                SectionCard(title = "${strings.paymentCollection} (${mySubmissions.size})", accentColor = EmeraldSecondary) {
-                    if (mySubmissions.isEmpty()) {
-                        EmptyStateNotice(strings.noDataYet)
-                    } else {
-                        mySubmissions.take(5).forEach { sub ->
+            if (ops != null && ops.recentBatches.isNotEmpty()) {
+                item {
+                    SectionCard(title = "${strings.productionBatches} (${ops.recentBatches.size})", accentColor = EmeraldSecondary) {
+                        ops.recentBatches.take(5).forEach { batch ->
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
-                                    Text("${sub.paymentMethod} • ${Formatters.formatTaka(sub.amount)}", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-                                    Text(Formatters.formatDateTime(sub.createdAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(batch.batchNumber, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                                    Text(
+                                        "Planned: ${Formatters.formatQty(batch.plannedQty)} • Actual: ${Formatters.formatQty(batch.actualQty)} • Good: ${Formatters.formatQty(batch.goodQty)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                                StatusChip(sub.status)
+                                StatusChip(batch.status)
                             }
                             HorizontalDivider()
                         }
@@ -381,50 +394,52 @@ fun RoleBasedDashboardScreen(
             }
         }
 
-        // --- 5. ASSIGNED TASKS & LOW STOCK ALERTS ---
-        item {
-            SectionCard(title = strings.myTasks, accentColor = EmeraldSecondary) {
-                if (tasks.isEmpty()) {
-                    EmptyStateNotice(strings.noDataYet)
-                } else {
-                    tasks.take(6).forEach { task ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = task.status == "COMPLETED",
-                                onCheckedChange = { checked ->
-                                    onToggleTask(task.id, if (checked) "COMPLETED" else "IN_PROGRESS")
+        // --- 5. ADMIN TASKS & LOW STOCK ALERTS ---
+        if (session.isFullAdmin) {
+            item {
+                SectionCard(title = strings.myTasks, accentColor = EmeraldSecondary) {
+                    if (tasks.isEmpty()) {
+                        EmptyStateNotice(strings.noDataYet)
+                    } else {
+                        tasks.take(6).forEach { task ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = task.status == "COMPLETED",
+                                    onCheckedChange = { checked ->
+                                        onToggleTask(task.id, if (checked) "COMPLETED" else "IN_PROGRESS")
+                                    }
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(task.title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+                                    if (task.description.isNotBlank()) {
+                                        Text(task.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(task.title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
-                                if (task.description.isNotBlank()) {
-                                    Text(task.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                                StatusChip(task.status)
                             }
-                            StatusChip(task.status)
                         }
                     }
                 }
             }
-        }
 
-        if (ops != null && ops.lowStockRawMaterials.isNotEmpty()) {
-            item {
-                SectionCard(title = strings.lowStockAlerts, accentColor = RoseAccent) {
-                    ops.lowStockRawMaterials.forEach { mat ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("${mat.name} (${mat.materialCode})", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                "${Formatters.formatQty(mat.availableQuantity, mat.unit)} / min ${Formatters.formatQty(mat.minimumStock)}",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = ErrorRed
-                            )
+            if (ops != null && ops.lowStockRawMaterials.isNotEmpty()) {
+                item {
+                    SectionCard(title = strings.lowStockAlerts, accentColor = RoseAccent) {
+                        ops.lowStockRawMaterials.forEach { mat ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("${mat.name} (${mat.materialCode})", style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "${Formatters.formatQty(mat.availableQuantity, mat.unit)} / min ${Formatters.formatQty(mat.minimumStock)}",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = ErrorRed
+                                )
+                            }
                         }
                     }
                 }
@@ -556,7 +571,7 @@ private fun ExecutiveHeroBanner(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if ((session.role == UserRole.SUPER_ADMIN || session.role == UserRole.ADMIN) && fin != null) {
+                    if (session.isFullAdmin && fin != null) {
                         HeroHighlightPill(
                             label = strings.todaySales,
                             value = Formatters.formatTaka(fin.todaySalesAmount),
@@ -576,24 +591,24 @@ private fun ExecutiveHeroBanner(
                             )
                         }
                     } else if (ops != null) {
+                        HeroHighlightPill(
+                            label = strings.todayProduction,
+                            value = Formatters.formatQty(ops.todayProductionQty, "u"),
+                            modifier = Modifier.weight(1f)
+                        )
                         if (session.role == UserRole.MODERATOR_MANAGER) {
                             HeroHighlightPill(
-                                label = strings.todayProduction,
-                                value = Formatters.formatQty(ops.todayProductionQty, "u"),
+                                label = "Today's Orders",
+                                value = ops.todayOrdersCount.toString(),
                                 modifier = Modifier.weight(1f)
                             )
                         } else {
                             HeroHighlightPill(
-                                label = strings.myTasks,
-                                value = ops.myPendingTasksCount.toString(),
+                                label = strings.goodProducts,
+                                value = Formatters.formatQty(ops.totalGoodQty, "u"),
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        HeroHighlightPill(
-                            label = strings.pendingDeliveries,
-                            value = ops.pendingDeliveriesCount.toString(),
-                            modifier = Modifier.weight(1f)
-                        )
                     }
                 }
             }

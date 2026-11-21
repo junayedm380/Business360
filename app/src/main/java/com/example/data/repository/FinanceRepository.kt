@@ -41,39 +41,52 @@ class FinanceRepository(private val db: ErpDatabase) {
             dao.observeSales(),
             dao.observeMyTasks(session.id)
         ) { batches, rawMaterials, invBalances, sales, myTasks ->
+            val canSeeCost = session.canViewCosting
+            val sanitizedBatches = if (canSeeCost) batches else batches.map {
+                it.copy(materialCost = 0.0, laborCost = 0.0, machineCost = 0.0, electricityCost = 0.0, otherCost = 0.0, totalCost = 0.0)
+            }
             val startOfDay = startOfDayMillis()
             val startOfMonth = startOfMonthMillis()
-            val todayProd = batches.filter { it.createdAt >= startOfDay }.sumOf { it.goodQty }
-            val monthProd = batches.filter { it.createdAt >= startOfMonth }.sumOf { it.goodQty }
-            val totalGood = batches.filter { it.status == "COMPLETED" }.sumOf { it.goodQty }
-            val totalRej = batches.sumOf { it.rejectedQty }
-            val lowRaw = rawMaterials.filter { it.availableQuantity <= it.minimumStock }
-            val pendingProd = batches.count { it.status in listOf("SUBMITTED", "REVIEWED", "APPROVED") }
+            val todayProd = sanitizedBatches.filter { it.createdAt >= startOfDay }.sumOf { it.goodQty }
+            val monthProd = sanitizedBatches.filter { it.createdAt >= startOfMonth }.sumOf { it.goodQty }
+            val totalGood = sanitizedBatches.filter { it.status == "COMPLETED" }.sumOf { it.goodQty }
+            val totalRej = sanitizedBatches.sumOf { it.rejectedQty }
+            val canSeeRaw = session.has(AppPermission.VIEW_RAW_MATERIALS) || session.isFullAdmin
+            val canSeeSalesCount = session.has(AppPermission.CREATE_SALES) || session.isFullAdmin
+            val canSeeInv = session.has(AppPermission.VIEW_INVENTORY)
+            val lowRaw = if (canSeeRaw) {
+                rawMaterials.filter { it.availableQuantity <= it.minimumStock }.map { mat ->
+                    if (canSeeCost || session.has(AppPermission.VIEW_PURCHASE_PRICES)) mat else mat.copy(purchasePrice = 0.0)
+                }
+            } else emptyList()
+            val pendingProd = sanitizedBatches.count { it.status in listOf("SUBMITTED", "REVIEWED", "APPROVED") }
 
             OperationalDashboardData(
                 todayProductionQty = Formatters.roundQty(todayProd),
                 monthlyProductionQty = Formatters.roundQty(monthProd),
                 totalGoodQty = Formatters.roundQty(totalGood),
                 totalRejectedQty = Formatters.roundQty(totalRej),
-                rawMaterialCount = rawMaterials.size,
-                totalRawMaterialUnits = Formatters.roundQty(rawMaterials.sumOf { it.availableQuantity }),
-                totalFinishedGoodsUnits = Formatters.roundQty(invBalances.sumOf { it.goodQty }),
+                rawMaterialCount = if (canSeeRaw) rawMaterials.size else 0,
+                totalRawMaterialUnits = if (canSeeRaw) Formatters.roundQty(rawMaterials.sumOf { it.availableQuantity }) else 0.0,
+                totalFinishedGoodsUnits = if (canSeeInv) Formatters.roundQty(invBalances.sumOf { it.goodQty }) else 0.0,
                 lowStockRawMaterials = lowRaw,
                 lowStockModelsCount = 0,
-                todayOrdersCount = sales.count { it.saleDate >= startOfDay },
-                pendingDeliveriesCount = sales.count { it.deliveryStatus in listOf("PENDING", "PARTIAL") },
+                todayOrdersCount = if (canSeeSalesCount) sales.count { it.saleDate >= startOfDay } else 0,
+                pendingDeliveriesCount = if (canSeeInv) sales.count { it.deliveryStatus in listOf("PENDING", "PARTIAL") } else 0,
                 pendingProductionApprovals = pendingProd,
-                myPendingTasksCount = myTasks.count { it.status != "COMPLETED" },
-                recentBatches = batches.take(8),
-                warehouseBalances = invBalances
+                myPendingTasksCount = if (session.isFullAdmin || session.has(AppPermission.MANAGE_TASKS)) myTasks.count { it.status != "COMPLETED" } else 0,
+                recentBatches = sanitizedBatches.take(8),
+                warehouseBalances = if (canSeeInv) invBalances else emptyList()
             )
         }
 
         if (!session.canViewFinancials) {
             // Strictly never expose or compute FinancialDashboardData for Moderator/Manager or Employee
             return combine(baseFlow, dao.observeModels()) { ops, models ->
-                val stockByModel = ops.warehouseBalances.groupBy { it.modelId }.mapValues { entry -> entry.value.sumOf { it.goodQty } }
-                val lowModels = models.count { (stockByModel[it.id] ?: 0.0) <= it.minimumStock }
+                val lowModels = if (session.has(AppPermission.VIEW_INVENTORY)) {
+                    val stockByModel = ops.warehouseBalances.groupBy { it.modelId }.mapValues { entry -> entry.value.sumOf { it.goodQty } }
+                    models.count { (stockByModel[it.id] ?: 0.0) <= it.minimumStock }
+                } else 0
                 RoleDashboardSnapshot(operational = ops.copy(lowStockModelsCount = lowModels), financial = null)
             }
         }
@@ -237,8 +250,8 @@ class FinanceRepository(private val db: ErpDatabase) {
         if (sub.status != "PENDING") {
             throw IllegalStateException("Payment submission has already been ${sub.status}")
         }
-        // MANDATORY SECURITY RULE: Employees/users cannot approve their own payment submissions
-        if (sub.submittedByUserId == actor.id && actor.role != com.example.domain.UserRole.SUPER_ADMIN) {
+        // MANDATORY SECURITY RULE: Non-admin users cannot approve their own payment submissions
+        if (sub.submittedByUserId == actor.id && !actor.isFullAdmin) {
             throw ErpSecurityException("Users cannot approve their own payment submissions")
         }
 
@@ -373,8 +386,15 @@ class FinanceRepository(private val db: ErpDatabase) {
             throw ErpSecurityException("Purchase order access denied")
         }
         return dao.observePurchaseOrders().map { list ->
-            if (session.canViewFinancials) list
-            else list.map { it.copy(unitPrice = 0.0, discount = 0.0, additionalCharges = 0.0, totalAmount = 0.0, paidAmount = 0.0, payableAmount = 0.0) }
+            when {
+                session.canViewFinancials -> list
+                session.has(AppPermission.VIEW_PURCHASE_PRICES) -> list.map {
+                    it.copy(paidAmount = 0.0, payableAmount = 0.0)
+                }
+                else -> list.map {
+                    it.copy(unitPrice = 0.0, discount = 0.0, additionalCharges = 0.0, totalAmount = 0.0, paidAmount = 0.0, payableAmount = 0.0)
+                }
+            }
         }
     }
 
@@ -557,12 +577,11 @@ class FinanceRepository(private val db: ErpDatabase) {
     }
 
     // --- Expenses & Cash/Bank Accounts ---
-    fun observeExpenses(session: SessionUser): Flow<List<ExpenseEntity>> =
-        if (session.has(AppPermission.VIEW_EXPENSE_TOTALS) || session.has(AppPermission.APPROVE_EXPENSES)) {
-            dao.observeExpenses()
-        } else {
-            dao.observeMyExpenses(session.id)
-        }
+    fun observeExpenses(session: SessionUser): Flow<List<ExpenseEntity>> = when {
+        session.has(AppPermission.VIEW_EXPENSE_TOTALS) || session.has(AppPermission.APPROVE_EXPENSES) -> dao.observeExpenses()
+        session.has(AppPermission.SUBMIT_EXPENSE) -> dao.observeMyExpenses(session.id)
+        else -> throw ErpSecurityException("Expense access denied")
+    }
 
     suspend fun submitExpense(
         actor: SessionUser,

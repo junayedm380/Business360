@@ -226,7 +226,7 @@ private fun AuthenticatedErpShell(
         viewModel.clearFeedback()
     }
 
-    val destinations = remember(session, strings) {
+    val destinations = remember(session, strings, language) {
         buildList {
             add(NavDestination("dashboard", strings.navDashboard, Icons.Filled.Dashboard))
             if (session.has(AppPermission.VIEW_PRODUCTION) || session.has(AppPermission.VIEW_PRODUCTS)) {
@@ -235,16 +235,16 @@ private fun AuthenticatedErpShell(
             if (session.has(AppPermission.VIEW_INVENTORY)) {
                 add(NavDestination("inventory", strings.navInventory, Icons.Filled.Inventory2))
             }
-            if (session.has(AppPermission.CREATE_SALES) || session.has(AppPermission.VIEW_CUSTOMERS)) {
+            if (session.has(AppPermission.CREATE_SALES)) {
                 add(NavDestination("sales", strings.navSales, Icons.Filled.PointOfSale))
             }
-            if (session.has(AppPermission.SUBMIT_PAYMENT_COLLECTION) ||
-                session.has(AppPermission.APPROVE_PAYMENTS) ||
-                session.has(AppPermission.VIEW_SUPPLIERS) ||
-                session.has(AppPermission.SUBMIT_EXPENSE) ||
-                session.canViewFinancials
-            ) {
-                add(NavDestination("finance", strings.navFinance, Icons.Filled.AccountBalance))
+            if (session.has(AppPermission.MANAGE_PURCHASES) || session.canViewFinancials) {
+                val finLabel = if (!session.canViewFinancials && session.has(AppPermission.MANAGE_PURCHASES)) {
+                    if (language == AppLanguage.BN) "ক্রয়" else "Purchases"
+                } else {
+                    strings.navFinance
+                }
+                add(NavDestination("finance", finLabel, Icons.Filled.AccountBalance))
             }
             add(NavDestination("admin", strings.navAdmin, Icons.Filled.AdminPanelSettings))
         }
@@ -292,9 +292,11 @@ private fun AuthenticatedErpShell(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                     actions = {
-                        IconButton(onClick = { currentRoute = "admin" }, modifier = Modifier.testTag("btn_notifications")) {
-                            BadgedBox(badge = { if (unreadCount > 0) Badge { Text(unreadCount.toString()) } }) {
-                                Icon(Icons.Filled.Notifications, contentDescription = strings.notifications)
+                        if (session.isFullAdmin) {
+                            IconButton(onClick = { currentRoute = "admin" }, modifier = Modifier.testTag("btn_notifications")) {
+                                BadgedBox(badge = { if (unreadCount > 0) Badge { Text(unreadCount.toString()) } }) {
+                                    Icon(Icons.Filled.Notifications, contentDescription = strings.notifications)
+                                }
                             }
                         }
                     }
@@ -356,6 +358,7 @@ private fun AuthenticatedErpShell(
                         onDeleteBom = viewModel::deleteBomItem,
                         onSaveRawMaterial = viewModel::saveRawMaterial,
                         onCreateBatch = viewModel::createProductionBatch,
+                        onEditBatch = viewModel::editProductionBatch,
                         onAdvanceBatch = viewModel::advanceProductionBatch
                     )
                     "inventory" -> InventoryScreen(

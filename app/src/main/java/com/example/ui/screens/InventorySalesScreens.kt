@@ -226,25 +226,38 @@ fun SalesAndCustomersScreen(
     onProcessReturn: (String, String, Double, String, String) -> Unit,
     onOpenCustomerLedger: (String) -> Unit
 ) {
+    val tabs = buildList {
+        if (session.has(AppPermission.CREATE_SALES) || session.isFullAdmin) add("ORDERS")
+        if (session.has(AppPermission.VIEW_CUSTOMERS)) add("CUSTOMERS")
+        if (session.has(AppPermission.MANAGE_RETURNS) || session.isFullAdmin) add("RETURNS")
+    }
     var selectedTab by remember { mutableIntStateOf(0) }
+    val activeTab = tabs.getOrElse(selectedTab) { tabs.firstOrNull() ?: "ORDERS" }
     var search by remember { mutableStateOf("") }
     var showNewSaleDialog by remember { mutableStateOf<String?>(null) } // "WHOLESALE" or "RETAIL"
     var showCustomerDialog by remember { mutableStateOf(false) }
     var showReturnDialogForSale by remember { mutableStateOf<SaleSanitizedView?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        PrimaryTabRow(selectedTabIndex = selectedTab) {
-            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Orders & POS") })
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text(strings.customers) })
-            Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text(strings.returnsAndRefunds) })
+        if (tabs.size > 1) {
+            PrimaryTabRow(selectedTabIndex = selectedTab.coerceAtMost(tabs.lastIndex)) {
+                tabs.forEachIndexed { idx, key ->
+                    val title = when (key) {
+                        "ORDERS" -> "Orders & POS"
+                        "CUSTOMERS" -> strings.customers
+                        else -> strings.returnsAndRefunds
+                    }
+                    Tab(selected = selectedTab == idx, onClick = { selectedTab = idx }, text = { Text(title) })
+                }
+            }
         }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            when (selectedTab) {
-                0 -> {
+            when (activeTab) {
+                "ORDERS" -> {
                     item {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (session.has(AppPermission.CREATE_SALES)) {
@@ -277,8 +290,13 @@ fun SalesAndCustomersScreen(
                                 Spacer(Modifier.height(6.dp))
                                 Text("Total Quantity: ${Formatters.formatQty(sale.totalItemQty, "units")}", style = MaterialTheme.typography.bodyMedium)
                                 if (sale.grandTotal != null) {
+                                    val priceText = if (sale.paidAmount != null) {
+                                        "Grand Total: ${Formatters.formatTaka(sale.grandTotal)} | Paid: ${Formatters.formatTaka(sale.paidAmount)} | Due: ${Formatters.formatTaka(sale.dueAmount ?: 0.0)}"
+                                    } else {
+                                        "Sale Total: ${Formatters.formatTaka(sale.grandTotal)}"
+                                    }
                                     Text(
-                                        "Grand Total: ${Formatters.formatTaka(sale.grandTotal)} | Paid: ${Formatters.formatTaka(sale.paidAmount ?: 0.0)} | Due: ${Formatters.formatTaka(sale.dueAmount ?: 0.0)}",
+                                        priceText,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.secondary
                                     )
@@ -305,7 +323,7 @@ fun SalesAndCustomersScreen(
                         }
                     }
                 }
-                1 -> {
+                "CUSTOMERS" -> {
                     item {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
@@ -350,7 +368,7 @@ fun SalesAndCustomersScreen(
                         }
                     }
                 }
-                2 -> {
+                "RETURNS" -> {
                     if (returns.isEmpty()) {
                         item { EmptyStateNotice(strings.noDataYet) }
                     } else {
@@ -520,13 +538,16 @@ private fun SaleFormDialog(
     var warehouse by remember { mutableStateOf(warehouses.first()) }
     var model by remember { mutableStateOf(models.first()) }
     var qty by remember { mutableStateOf("1") }
-    var customPrice by remember { mutableStateOf("") }
+    var customPrice by remember {
+        mutableStateOf((if (saleType == "WHOLESALE") model.wholesalePrice else model.retailPrice).toString())
+    }
     val cart = remember { mutableStateListOf<SaleItemRequest>() }
     var discount by remember { mutableStateOf("0") }
     var charges by remember { mutableStateOf("0") }
     var paid by remember { mutableStateOf("0") }
     var method by remember { mutableStateOf("CASH") }
-    var deliverNow by remember { mutableStateOf(saleType == "RETAIL") }
+    val canDispatch = session.has(AppPermission.DISPATCH_DELIVERY)
+    var deliverNow by remember { mutableStateOf(canDispatch && saleType == "RETAIL") }
     var notes by remember { mutableStateOf("") }
     var cExp by remember { mutableStateOf(false) }
     var mExp by remember { mutableStateOf(false) }
@@ -545,13 +566,22 @@ private fun SaleFormDialog(
                 ExposedDropdownMenuBox(expanded = mExp, onExpandedChange = { mExp = !mExp }) {
                     OutlinedTextField(value = model.modelName, onValueChange = {}, readOnly = true, label = { Text("Product Model") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(mExp) }, modifier = Modifier.menuAnchor().fillMaxWidth())
                     ExposedDropdownMenu(expanded = mExp, onDismissRequest = { mExp = false }) {
-                        models.forEach { m -> DropdownMenuItem(text = { Text("${m.modelName} (${m.modelCode})") }, onClick = { model = m; mExp = false }) }
+                        models.forEach { m ->
+                            DropdownMenuItem(
+                                text = { Text("${m.modelName} (${m.modelCode})") },
+                                onClick = {
+                                    model = m
+                                    customPrice = (if (saleType == "WHOLESALE") m.wholesalePrice else m.retailPrice).toString()
+                                    mExp = false
+                                }
+                            )
+                        }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(value = qty, onValueChange = { qty = it }, label = { Text("Qty") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
                     if (session.has(AppPermission.VIEW_UNIT_PRICES) || session.canViewFinancials) {
-                        OutlinedTextField(value = customPrice, onValueChange = { customPrice = it }, label = { Text("Price (opt)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = customPrice, onValueChange = { customPrice = it }, label = { Text("Unit Price (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
                     }
                 }
                 FilledTonalButton(onClick = {
@@ -560,16 +590,21 @@ private fun SaleFormDialog(
                 }) { Text("Add Line Item (${cart.size})") }
                 cart.forEach { item ->
                     val mName = models.firstOrNull { it.id == item.modelId }?.modelName ?: item.modelId
-                    Text("• $mName x ${item.quantity}", style = MaterialTheme.typography.bodySmall)
+                    val priceLabel = item.customUnitPrice?.let { " @ ${Formatters.formatTaka(it)}" } ?: ""
+                    Text("• $mName x ${item.quantity}$priceLabel", style = MaterialTheme.typography.bodySmall)
                 }
-                if (session.canViewFinancials || saleType == "RETAIL") {
+                if (session.has(AppPermission.VIEW_UNIT_PRICES) || session.canViewFinancials) {
                     OutlinedTextField(value = discount, onValueChange = { discount = it }, label = { Text("Discount (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                     OutlinedTextField(value = charges, onValueChange = { charges = it }, label = { Text("Additional Charges (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                }
+                if (session.canViewFinancials) {
                     OutlinedTextField(value = paid, onValueChange = { paid = it }, label = { Text("Paid Amount (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = deliverNow, onCheckedChange = { deliverNow = it })
-                    Text("Deliver immediately & deduct stock", style = MaterialTheme.typography.bodySmall)
+                if (canDispatch) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = deliverNow, onCheckedChange = { deliverNow = it })
+                        Text("Deliver immediately & deduct stock", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") })
             }
@@ -581,7 +616,8 @@ private fun SaleFormDialog(
                     onSubmit(
                         customer.id, warehouse.id, cart.toList(),
                         discount.toDoubleOrNull() ?: 0.0, charges.toDoubleOrNull() ?: 0.0,
-                        paid.toDoubleOrNull() ?: 0.0, method, deliverNow, notes
+                        if (session.canViewFinancials) (paid.toDoubleOrNull() ?: 0.0) else 0.0,
+                        method, if (canDispatch) deliverNow else false, notes
                     )
                 }
             ) { Text("Create Invoice") }

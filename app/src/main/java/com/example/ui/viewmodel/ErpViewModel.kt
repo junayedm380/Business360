@@ -136,31 +136,50 @@ class ErpViewModel(
         sessionFlow(emptyList()) { authRepo.observeNotifications(it) }
 
     val products: StateFlow<List<ProductEntity>> =
-        sessionFlow(emptyList()) { opsRepo.observeProducts() }
+        sessionFlow(emptyList()) { s ->
+            if (s.has(AppPermission.VIEW_PRODUCTS) || s.has(AppPermission.VIEW_PRODUCTION)) opsRepo.observeProducts()
+            else flowOf(emptyList())
+        }
 
     val models: StateFlow<List<ProductModelEntity>> =
-        sessionFlow(emptyList()) { opsRepo.observeModels() }
+        sessionFlow(emptyList()) { s ->
+            if (s.has(AppPermission.VIEW_PRODUCTS) || s.has(AppPermission.VIEW_PRODUCTION) || s.has(AppPermission.CREATE_SALES) || s.has(AppPermission.VIEW_INVENTORY)) {
+                opsRepo.observeModelsSanitized(s)
+            } else flowOf(emptyList())
+        }
 
     val bomItems: StateFlow<List<BomItemEntity>> =
-        sessionFlow(emptyList()) { opsRepo.observeBomItems() }
+        sessionFlow(emptyList()) { s ->
+            if (s.canViewCosting) opsRepo.observeBomItems(s) else flowOf(emptyList())
+        }
 
     val warehouses: StateFlow<List<WarehouseEntity>> =
         sessionFlow(emptyList()) { opsRepo.observeWarehouses() }
 
     val rawMaterials: StateFlow<List<RawMaterialEntity>> =
-        sessionFlow(emptyList()) { opsRepo.observeRawMaterials() }
+        sessionFlow(emptyList()) { s ->
+            if (s.has(AppPermission.VIEW_RAW_MATERIALS) || s.isFullAdmin) opsRepo.observeRawMaterialsSanitized(s) else flowOf(emptyList())
+        }
 
     val materialLedger: StateFlow<List<MaterialLedgerEntity>> =
-        sessionFlow(emptyList()) { opsRepo.observeMaterialLedger() }
+        sessionFlow(emptyList()) { s ->
+            if (s.isFullAdmin) opsRepo.observeMaterialLedger(s) else flowOf(emptyList())
+        }
 
     val productionBatches: StateFlow<List<ProductionBatchEntity>> =
-        sessionFlow(emptyList()) { opsRepo.observeProductionBatches() }
+        sessionFlow(emptyList()) { s ->
+            if (s.has(AppPermission.VIEW_PRODUCTION)) opsRepo.observeProductionBatchesSanitized(s) else flowOf(emptyList())
+        }
 
     val inventoryBalances: StateFlow<List<InventoryBalanceEntity>> =
-        sessionFlow(emptyList()) { opsRepo.observeInventoryBalances() }
+        sessionFlow(emptyList()) { s ->
+            if (s.has(AppPermission.VIEW_INVENTORY)) opsRepo.observeInventoryBalances(s) else flowOf(emptyList())
+        }
 
     val stockMovements: StateFlow<List<StockMovementEntity>> =
-        sessionFlow(emptyList()) { opsRepo.observeStockMovements() }
+        sessionFlow(emptyList()) { s ->
+            if (s.has(AppPermission.VIEW_INVENTORY)) opsRepo.observeStockMovements(s) else flowOf(emptyList())
+        }
 
     val customers: StateFlow<List<CustomerSanitizedView>> =
         sessionFlow(emptyList()) { s ->
@@ -168,13 +187,19 @@ class ErpViewModel(
         }
 
     val sales: StateFlow<List<SaleSanitizedView>> =
-        sessionFlow(emptyList()) { opsRepo.observeSalesSanitized(it) }
+        sessionFlow(emptyList()) { s ->
+            if (s.has(AppPermission.CREATE_SALES) || s.canViewFinancials) opsRepo.observeSalesSanitized(s) else flowOf(emptyList())
+        }
 
     val salesReturns: StateFlow<List<SalesReturnEntity>> =
-        sessionFlow(emptyList()) { opsRepo.observeSalesReturns() }
+        sessionFlow(emptyList()) { s ->
+            if (s.has(AppPermission.MANAGE_RETURNS) || s.isFullAdmin) opsRepo.observeSalesReturns(s) else flowOf(emptyList())
+        }
 
     val tasks: StateFlow<List<EmployeeTaskEntity>> =
-        sessionFlow(emptyList()) { opsRepo.observeTasks(it) }
+        sessionFlow(emptyList()) { s ->
+            if (s.isFullAdmin || s.has(AppPermission.MANAGE_TASKS)) opsRepo.observeTasks(s) else flowOf(emptyList())
+        }
 
     val paymentSubmissions: StateFlow<List<PaymentSubmissionEntity>> =
         sessionFlow(emptyList()) { s ->
@@ -194,7 +219,11 @@ class ErpViewModel(
         }
 
     val expenses: StateFlow<List<ExpenseEntity>> =
-        sessionFlow(emptyList()) { finRepo.observeExpenses(it) }
+        sessionFlow(emptyList()) { s ->
+            if (s.has(AppPermission.SUBMIT_EXPENSE) || s.has(AppPermission.VIEW_EXPENSE_TOTALS) || s.has(AppPermission.APPROVE_EXPENSES)) {
+                finRepo.observeExpenses(s)
+            } else flowOf(emptyList())
+        }
 
     val cashAccounts: StateFlow<List<CashAccountEntity>> =
         sessionFlow(emptyList()) { s ->
@@ -225,12 +254,12 @@ class ErpViewModel(
 
     val managedUsers: StateFlow<List<UserEntity>> =
         sessionFlow(emptyList()) { s ->
-            if (s.has(AppPermission.MANAGE_USERS) || s.has(AppPermission.MANAGE_TASKS)) authRepo.observeUsers(s) else flowOf(emptyList())
+            if (s.isFullAdmin || s.has(AppPermission.MANAGE_USERS) || s.has(AppPermission.MANAGE_TASKS)) authRepo.observeUsers(s) else flowOf(emptyList())
         }
 
     val auditLogs: StateFlow<List<AuditLogEntity>> =
         sessionFlow(emptyList()) { s ->
-            if (s.role == UserRole.SUPER_ADMIN || s.has(AppPermission.VIEW_AUDIT_LOGS)) authRepo.observeAuditLogs(s) else flowOf(emptyList())
+            if (s.isFullAdmin || s.has(AppPermission.VIEW_AUDIT_LOGS)) authRepo.observeAuditLogs(s) else flowOf(emptyList())
         }
 
     val selectedCustomerLedger: StateFlow<List<CustomerLedgerEntity>> =
@@ -348,6 +377,13 @@ class ErpViewModel(
     ) = withSession({
         opsRepo.createProductionBatch(it, modelId, warehouseId, planned, actual, rejected, wastage, labor, machine, electricity, other, notes)
     }, "Production batch submitted")
+
+    fun editProductionBatch(
+        batchId: String, modelId: String, warehouseId: String, planned: Double, actual: Double, rejected: Double,
+        wastage: Double, labor: Double, machine: Double, electricity: Double, other: Double, notes: String
+    ) = withSession({
+        opsRepo.editProductionBatch(it, batchId, modelId, warehouseId, planned, actual, rejected, wastage, labor, machine, electricity, other, notes)
+    }, "Production batch updated")
 
     fun advanceProductionBatch(batchId: String, nextStatus: String) =
         withSession({ opsRepo.advanceProductionBatch(it, batchId, nextStatus) }, "Production status updated to $nextStatus")
