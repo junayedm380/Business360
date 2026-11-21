@@ -1,0 +1,6 @@
+{
+  "name": "CraftERP",
+  "description": "Complete manufacturing, wholesale, retail, inventory, and double-entry accounting ERP application with role-based access control.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
