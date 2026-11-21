@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/erp_icon_art_1795274161796"
+        android:drawable="@drawable/business360_launcher_art"
         android:gravity="center" />
 </layer-list>
