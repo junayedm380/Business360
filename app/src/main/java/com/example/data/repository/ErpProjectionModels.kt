@@ -130,5 +130,62 @@ enum class ReportType {
     SALES_ORDERS_OPERATIONAL,
     FINANCIAL_SALES_LEDGER,
     FINANCIAL_PROFIT_LOSS,
-    FINANCIAL_CUSTOMER_DUES
+    FINANCIAL_CUSTOMER_DUES,
+    HR_ATTENDANCE_MONTHLY,
+    HR_LEAVE_SUMMARY,
+    HR_PAYROLL_MONTHLY
 }
+
+data class EmployeeSanitizedView(
+    val id: String,
+    val employeeCode: String,
+    val fullName: String,
+    val photoUri: String,
+    val phone: String,
+    val department: String,
+    val designation: String,
+    val joiningDate: Long,
+    val employmentStatus: String,
+    val active: Boolean,
+    val linkedUserId: String,
+    val basicSalary: Double?,
+    val houseAllowance: Double?,
+    val medicalAllowance: Double?,
+    val transportAllowance: Double?,
+    val otherAllowance: Double?,
+    val overtimeHourlyRate: Double?
+) {
+    val totalPackage: Double?
+        get() = if (basicSalary != null) {
+            basicSalary + (houseAllowance ?: 0.0) + (medicalAllowance ?: 0.0) +
+                (transportAllowance ?: 0.0) + (otherAllowance ?: 0.0)
+        } else null
+}
+
+data class LeaveBalanceItem(
+    val employeeId: String,
+    val employeeCode: String,
+    val employeeName: String,
+    val leaveTypeId: String,
+    val leaveTypeName: String,
+    val isPaid: Boolean,
+    val annualQuota: Int,
+    val usedDays: Int,
+    val remainingDays: Int
+)
+
+data class AttendanceMonthlySummaryRow(
+    val employeeId: String,
+    val employeeCode: String,
+    val employeeName: String,
+    val department: String,
+    val monthKey: String,
+    val presentDays: Int,
+    val lateDays: Int,
+    val halfDays: Int,
+    val absentDays: Int,
+    val paidLeaveDays: Int,
+    val unpaidLeaveDays: Int,
+    val holidayDays: Int,
+    val overtimeHours: Double
+)

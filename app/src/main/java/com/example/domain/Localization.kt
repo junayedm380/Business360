@@ -85,7 +85,13 @@ data class AppStrings(
     val cancel: String,
     val save: String,
     val searchHint: String,
-    val noDataYet: String
+    val noDataYet: String,
+    val navHr: String,
+    val employeeManagement: String,
+    val attendanceManagement: String,
+    val leaveManagement: String,
+    val payrollManagement: String,
+    val hrReports: String
 )
 
 object Translations {
@@ -156,7 +162,7 @@ object Translations {
         settings = "Settings",
         languageLabel = "Language",
         themeLabel = "Appearance",
-        restrictedNotice = "Confidential financial totals, ledgers, and profit balances are restricted for your role.",
+        restrictedNotice = "Confidential financial totals, ledgers, salaries, payroll, and profit balances are restricted for your role.",
         exportCsv = "Export CSV",
         approve = "Approve",
         reject = "Reject",
@@ -164,7 +170,13 @@ object Translations {
         cancel = "Cancel",
         save = "Save",
         searchHint = "Search records...",
-        noDataYet = "No records found yet. Use the action button to add your first entry."
+        noDataYet = "No records found yet. Use the action button to add your first entry.",
+        navHr = "HR",
+        employeeManagement = "Employee Management",
+        attendanceManagement = "Attendance Management",
+        leaveManagement = "Leave Management",
+        payrollManagement = "Payroll Management",
+        hrReports = "HR Reports"
     )
 
     val bengali = AppStrings(
@@ -234,7 +246,7 @@ object Translations {
         settings = "সেটিংস",
         languageLabel = "ভাষা",
         themeLabel = "থিম",
-        restrictedNotice = "গোপনীয় আর্থিক হিসাব, লাভ-ক্ষতি এবং বকেয়া তথ্য আপনার ভূমিকার জন্য সীমাবদ্ধ।",
+        restrictedNotice = "গোপনীয় আর্থিক হিসাব, বেতন, পেরোল, লাভ-ক্ষতি এবং বকেয়া তথ্য আপনার ভূমিকার জন্য সীমাবদ্ধ।",
         exportCsv = "সিএসভি ডাউনলোড",
         approve = "অনুমোদন",
         reject = "বাতিল",
@@ -242,7 +254,13 @@ object Translations {
         cancel = "বন্ধ করুন",
         save = "সংরক্ষণ করুন",
         searchHint = "তথ্য খুঁজুন...",
-        noDataYet = "এখনো কোনো তথ্য নেই। নতুন তথ্য যোগ করতে বাটনে চাপুন।"
+        noDataYet = "এখনো কোনো তথ্য নেই। নতুন তথ্য যোগ করতে বাটনে চাপুন।",
+        navHr = "এইচআর",
+        employeeManagement = "কর্মী ব্যবস্থাপনা",
+        attendanceManagement = "হাজিরা ব্যবস্থাপনা",
+        leaveManagement = "ছুটি ব্যবস্থাপনা",
+        payrollManagement = "বেতন ও পেরোল",
+        hrReports = "এইচআর রিপোর্ট"
     )
 
     fun forLanguage(lang: AppLanguage): AppStrings =

@@ -75,22 +75,35 @@ class AuthAndGovernanceRepository(private val db: ErpDatabase) {
                 )
             )
         }
-        if (dao.getChartOfAccountsCount() == 0) {
-            dao.insertChartOfAccounts(
-                listOf(
-                    ChartOfAccountEntity("coa_1001", "1001", "Cash & Bank Accounts", "ASSET"),
-                    ChartOfAccountEntity("coa_1100", "1100", "Accounts Receivable", "ASSET"),
-                    ChartOfAccountEntity("coa_1200", "1200", "Raw Material Inventory", "ASSET"),
-                    ChartOfAccountEntity("coa_1210", "1210", "Finished Goods Inventory", "ASSET"),
-                    ChartOfAccountEntity("coa_2001", "2001", "Accounts Payable", "LIABILITY"),
-                    ChartOfAccountEntity("coa_3001", "3001", "Owner Capital & Retained Equity", "EQUITY"),
-                    ChartOfAccountEntity("coa_4001", "4001", "Sales Revenue", "REVENUE"),
-                    ChartOfAccountEntity("coa_4100", "4100", "Sales Returns & Allowances", "REVENUE"),
-                    ChartOfAccountEntity("coa_5001", "5001", "Cost of Goods Sold (COGS)", "COGS"),
-                    ChartOfAccountEntity("coa_5100", "5100", "Production Labor & Overhead", "EXPENSE"),
-                    ChartOfAccountEntity("coa_6001", "6001", "Operating Expenses", "EXPENSE")
-                )
-            )
+        val allChartAccounts = listOf(
+            ChartOfAccountEntity("coa_1001", "1001", "Cash & Bank Accounts", "ASSET"),
+            ChartOfAccountEntity("coa_1100", "1100", "Accounts Receivable", "ASSET"),
+            ChartOfAccountEntity("coa_1150", "1150", "Employee Advances & Loans", "ASSET"),
+            ChartOfAccountEntity("coa_1200", "1200", "Raw Material Inventory", "ASSET"),
+            ChartOfAccountEntity("coa_1210", "1210", "Finished Goods Inventory", "ASSET"),
+            ChartOfAccountEntity("coa_2001", "2001", "Accounts Payable", "LIABILITY"),
+            ChartOfAccountEntity("coa_3001", "3001", "Owner Capital & Retained Equity", "EQUITY"),
+            ChartOfAccountEntity("coa_4001", "4001", "Sales Revenue", "REVENUE"),
+            ChartOfAccountEntity("coa_4100", "4100", "Sales Returns & Allowances", "REVENUE"),
+            ChartOfAccountEntity("coa_5001", "5001", "Cost of Goods Sold (COGS)", "COGS"),
+            ChartOfAccountEntity("coa_5100", "5100", "Production Labor & Overhead", "EXPENSE"),
+            ChartOfAccountEntity("coa_6001", "6001", "Operating Expenses", "EXPENSE"),
+            ChartOfAccountEntity("coa_6100", "6100", "Payroll & Salary Expenses", "EXPENSE")
+        )
+        if (dao.getChartOfAccountsCount() < allChartAccounts.size) {
+            dao.insertChartOfAccounts(allChartAccounts)
+        }
+        val hrDao = db.hrDao()
+        if (hrDao.getLeaveTypeCount() == 0) {
+            listOf(
+                com.example.data.local.LeaveTypeEntity(id = "lt_annual", code = "ANNUAL", name = "Annual Leave", annualQuotaDays = 14, isPaid = true),
+                com.example.data.local.LeaveTypeEntity(id = "lt_sick", code = "SICK", name = "Sick Leave", annualQuotaDays = 10, isPaid = true),
+                com.example.data.local.LeaveTypeEntity(id = "lt_casual", code = "CASUAL", name = "Casual Leave", annualQuotaDays = 7, isPaid = true),
+                com.example.data.local.LeaveTypeEntity(id = "lt_unpaid", code = "UNPAID", name = "Unpaid Leave", annualQuotaDays = 30, isPaid = false)
+            ).forEach { hrDao.upsertLeaveType(it) }
+        }
+        if (hrDao.getPayrollConfig() == null) {
+            hrDao.upsertPayrollConfig(com.example.data.local.PayrollRuleConfigEntity())
         }
     }
 

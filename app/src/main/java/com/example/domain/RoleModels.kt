@@ -51,13 +51,27 @@ enum class AppPermission {
     MANAGE_USERS,
     VIEW_AUDIT_LOGS,
     MANAGE_SETTINGS,
-    EXPORT_REPORTS
+    EXPORT_REPORTS,
+
+    // --- HR, Attendance, Leave & Payroll Permissions ---
+    VIEW_EMPLOYEES_BASIC,
+    MANAGE_EMPLOYEES,
+    VIEW_EMPLOYEE_SALARY,
+    MARK_ATTENDANCE,
+    EDIT_ATTENDANCE,
+    MANAGE_ATTENDANCE_CLOSING,
+    VIEW_ATTENDANCE_REPORTS,
+    VIEW_LEAVES,
+    MANAGE_LEAVES,
+    VIEW_PAYROLL,
+    MANAGE_PAYROLL,
+    VIEW_HR_REPORTS
 }
 
 object PermissionPolicy {
 
     /**
-     * Confidential financial & costing permissions strictly forbidden for Moderator/Manager and Employee.
+     * Confidential financial, costing & payroll permissions strictly forbidden for Moderator/Manager and Employee.
      */
     val CONFIDENTIAL_FINANCIAL_PERMISSIONS: Set<AppPermission> = setOf(
         AppPermission.VIEW_COSTING,
@@ -72,7 +86,10 @@ object PermissionPolicy {
         AppPermission.MANAGE_CASH_BANK,
         AppPermission.VIEW_ACCOUNTING,
         AppPermission.VIEW_PROFIT_LOSS,
-        AppPermission.DAILY_CLOSING
+        AppPermission.DAILY_CLOSING,
+        AppPermission.VIEW_EMPLOYEE_SALARY,
+        AppPermission.VIEW_PAYROLL,
+        AppPermission.MANAGE_PAYROLL
     )
 
     val EMPLOYEE_ALLOWED_PERMISSIONS: Set<AppPermission> = setOf(
@@ -96,7 +113,15 @@ object PermissionPolicy {
         AppPermission.VIEW_UNIT_PRICES,
         AppPermission.VIEW_SUPPLIERS,
         AppPermission.MANAGE_PURCHASES,
-        AppPermission.VIEW_PURCHASE_PRICES
+        AppPermission.VIEW_PURCHASE_PRICES,
+        // Manager HR & Attendance permissions (no salary, no payroll, no advances)
+        AppPermission.VIEW_EMPLOYEES_BASIC,
+        AppPermission.MARK_ATTENDANCE,
+        AppPermission.EDIT_ATTENDANCE,
+        AppPermission.MANAGE_ATTENDANCE_CLOSING,
+        AppPermission.VIEW_ATTENDANCE_REPORTS,
+        AppPermission.VIEW_LEAVES,
+        AppPermission.VIEW_HR_REPORTS
     )
 
     fun defaultPermissionsFor(role: UserRole): Set<AppPermission> = when (role) {
@@ -106,8 +131,16 @@ object PermissionPolicy {
     }
 
     fun parsePermissions(csv: String, role: UserRole): Set<AppPermission> {
-        if (role == UserRole.SUPER_ADMIN || role == UserRole.ADMIN) {
+        if (role == UserRole.SUPER_ADMIN) {
             return AppPermission.entries.toSet()
+        }
+        if (role == UserRole.ADMIN) {
+            if (csv.isBlank()) return AppPermission.entries.toSet()
+            val parsed = csv.split(",")
+                .mapNotNull { token -> AppPermission.entries.firstOrNull { it.name == token.trim() } }
+                .toSet()
+            // Forward-compatibility: existing Admins created before HR module get newly added HR permissions unless explicitly restricted
+            return parsed
         }
         if (csv.isBlank()) return emptySet()
         val parsed = csv.split(",")
@@ -122,7 +155,8 @@ object PermissionPolicy {
 
     fun serializePermissions(perms: Set<AppPermission>, role: UserRole): String {
         val sanitized = when (role) {
-            UserRole.SUPER_ADMIN, UserRole.ADMIN -> AppPermission.entries.toSet()
+            UserRole.SUPER_ADMIN -> AppPermission.entries.toSet()
+            UserRole.ADMIN -> perms
             UserRole.MODERATOR_MANAGER -> perms.intersect(MODERATOR_ALLOWED_PERMISSIONS)
             UserRole.EMPLOYEE -> perms.intersect(EMPLOYEE_ALLOWED_PERMISSIONS)
         }
@@ -138,19 +172,39 @@ data class SessionUser(
     val permissions: Set<AppPermission>,
     val active: Boolean
 ) {
+    val isSuperAdmin: Boolean
+        get() = role == UserRole.SUPER_ADMIN
+
     val isFullAdmin: Boolean
         get() = role == UserRole.SUPER_ADMIN || role == UserRole.ADMIN
 
     fun has(permission: AppPermission): Boolean =
-        isFullAdmin || permissions.contains(permission)
+        role == UserRole.SUPER_ADMIN || permissions.contains(permission)
 
     val canViewFinancials: Boolean
-        get() = isFullAdmin ||
-            (has(AppPermission.VIEW_PROFIT_LOSS) || has(AppPermission.VIEW_ACCOUNTING) || has(AppPermission.VIEW_CASH_BANK))
+        get() = role == UserRole.SUPER_ADMIN ||
+            (role == UserRole.ADMIN && (has(AppPermission.VIEW_PROFIT_LOSS) || has(AppPermission.VIEW_ACCOUNTING) || has(AppPermission.VIEW_CASH_BANK)))
 
     val canViewCosting: Boolean
-        get() = isFullAdmin || has(AppPermission.VIEW_COSTING)
+        get() = role == UserRole.SUPER_ADMIN || (role == UserRole.ADMIN && has(AppPermission.VIEW_COSTING))
 
     val canViewProfit: Boolean
-        get() = isFullAdmin || has(AppPermission.VIEW_PROFIT_LOSS)
+        get() = role == UserRole.SUPER_ADMIN || (role == UserRole.ADMIN && has(AppPermission.VIEW_PROFIT_LOSS))
+
+    val canViewSalaryAndPayroll: Boolean
+        get() = role == UserRole.SUPER_ADMIN ||
+            (role == UserRole.ADMIN && (has(AppPermission.VIEW_EMPLOYEE_SALARY) || has(AppPermission.VIEW_PAYROLL) || has(AppPermission.MANAGE_PAYROLL)))
+
+    val hasAnyHrAccess: Boolean
+        get() = has(AppPermission.VIEW_EMPLOYEES_BASIC) ||
+            has(AppPermission.MANAGE_EMPLOYEES) ||
+            has(AppPermission.MARK_ATTENDANCE) ||
+            has(AppPermission.EDIT_ATTENDANCE) ||
+            has(AppPermission.VIEW_ATTENDANCE_REPORTS) ||
+            has(AppPermission.MANAGE_ATTENDANCE_CLOSING) ||
+            has(AppPermission.VIEW_LEAVES) ||
+            has(AppPermission.MANAGE_LEAVES) ||
+            has(AppPermission.VIEW_PAYROLL) ||
+            has(AppPermission.MANAGE_PAYROLL) ||
+            has(AppPermission.VIEW_HR_REPORTS)
 }

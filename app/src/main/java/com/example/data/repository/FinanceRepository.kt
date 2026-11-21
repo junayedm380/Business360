@@ -19,6 +19,7 @@ import com.example.data.local.RawMaterialEntity
 import com.example.data.local.SupplierEntity
 import com.example.data.local.SupplierLedgerEntity
 import com.example.domain.AppPermission
+import com.example.domain.DhakaTime
 import com.example.domain.Formatters
 import com.example.domain.SessionUser
 import kotlinx.coroutines.CancellationException
@@ -144,12 +145,14 @@ class FinanceRepository(private val db: ErpDatabase) {
             val totalDue = customers.sumOf { it.currentDue }
             val totalPayable = suppliers.sumOf { it.currentPayable }
             val approvedExpenses = expenses.filter { it.status == "APPROVED" }.sumOf { it.amount }
+            val payrollExpenses = jLines.filter { it.accountId == "coa_6100" }.sumOf { it.debit - it.credit }
+            val totalOperatingExp = Formatters.roundMoney(approvedExpenses + payrollExpenses)
 
             val revenue = jLines.filter { it.accountId == "coa_4001" }.sumOf { it.credit - it.debit }
             val returns = jLines.filter { it.accountId == "coa_4100" }.sumOf { it.debit - it.credit }
             val cogs = jLines.filter { it.accountId == "coa_5001" }.sumOf { it.debit - it.credit }
             val grossProfit = Formatters.roundMoney((revenue - returns) - cogs)
-            val netProfit = Formatters.roundMoney(grossProfit - approvedExpenses)
+            val netProfit = Formatters.roundMoney(grossProfit - totalOperatingExp)
 
             val cashInHand = accounts.filter { it.accountType == "CASH" }.sumOf { it.currentBalance }
             val bankBalance = accounts.filter { it.accountType != "CASH" }.sumOf { it.currentBalance }
@@ -163,7 +166,7 @@ class FinanceRepository(private val db: ErpDatabase) {
                     totalPaymentsReceived = Formatters.roundMoney(totalPayments),
                     totalCustomerDue = Formatters.roundMoney(totalDue),
                     totalSupplierPayable = Formatters.roundMoney(totalPayable),
-                    totalExpenses = Formatters.roundMoney(approvedExpenses),
+                    totalExpenses = totalOperatingExp,
                     totalCogs = Formatters.roundMoney(cogs),
                     grossProfit = grossProfit,
                     netProfit = netProfit,
@@ -780,15 +783,19 @@ class FinanceRepository(private val db: ErpDatabase) {
             val netRev = Formatters.roundMoney(salesRev - salesRet)
             val cogs = Formatters.roundMoney(linesByAcct["coa_5001"].orEmpty().sumOf { it.debit - it.credit })
             val grossProfit = Formatters.roundMoney(netRev - cogs)
-            val opExp = Formatters.roundMoney(linesByAcct["coa_6001"].orEmpty().sumOf { it.debit - it.credit })
+            val opExp = Formatters.roundMoney(
+                linesByAcct["coa_6001"].orEmpty().sumOf { it.debit - it.credit } +
+                    linesByAcct["coa_6100"].orEmpty().sumOf { it.debit - it.credit }
+            )
             val netProfit = Formatters.roundMoney(grossProfit - opExp)
 
             val cashTotal = Formatters.roundMoney(cashAccounts.sumOf { it.currentBalance })
             val arTotal = Formatters.roundMoney(customers.sumOf { it.currentDue })
+            val advTotal = Formatters.roundMoney(linesByAcct["coa_1150"].orEmpty().sumOf { it.debit - it.credit }.coerceAtLeast(0.0))
             val invRaw = Formatters.roundMoney(linesByAcct["coa_1200"].orEmpty().sumOf { it.debit - it.credit }.coerceAtLeast(0.0))
             val invFg = Formatters.roundMoney(linesByAcct["coa_1210"].orEmpty().sumOf { it.debit - it.credit }.coerceAtLeast(0.0))
             val invTotal = Formatters.roundMoney(invRaw + invFg)
-            val totalAssets = Formatters.roundMoney(cashTotal + arTotal + invTotal)
+            val totalAssets = Formatters.roundMoney(cashTotal + arTotal + advTotal + invTotal)
             val apTotal = Formatters.roundMoney(suppliers.sumOf { it.currentPayable })
             val equity = Formatters.roundMoney(totalAssets - apTotal)
 
@@ -948,6 +955,11 @@ class FinanceRepository(private val db: ErpDatabase) {
                 sb.appendLine("Net Profit,${st.netProfit}")
                 "profit_and_loss_report.csv"
             }
+            ReportType.HR_ATTENDANCE_MONTHLY,
+            ReportType.HR_LEAVE_SUMMARY,
+            ReportType.HR_PAYROLL_MONTHLY -> {
+                throw IllegalArgumentException("Use HR Reports export for HR & Payroll datasets")
+            }
         }
         dao.insertAuditLog(
             AuditLogEntity(userId = actor.id, userName = actor.fullName, userRole = actor.role.name, action = "EXPORT_REPORT", module = "REPORTS", recordId = type.name, newValue = filename)
@@ -1002,20 +1014,9 @@ class FinanceRepository(private val db: ErpDatabase) {
         else -> "acct_cash"
     }
 
-    private fun startOfDayMillis(): Long = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
+    private fun startOfDayMillis(): Long = DhakaTime.startOfDayMillis()
 
-    private fun startOfMonthMillis(): Long = Calendar.getInstance().apply {
-        set(Calendar.DAY_OF_MONTH, 1)
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
+    private fun startOfMonthMillis(): Long = DhakaTime.startOfMonthMillis()
 }
 
 private typealias ProductModelEntityTuplePlaceholder = com.example.data.local.ProductModelEntity

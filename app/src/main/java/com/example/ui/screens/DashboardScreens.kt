@@ -33,6 +33,10 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.EventNote
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.PrecisionManufacturing
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
@@ -131,6 +135,21 @@ fun RoleBasedDashboardScreen(
         if (session.has(AppPermission.MANAGE_PURCHASES) || session.canViewFinancials) {
             val finLabel = if (!session.canViewFinancials && session.has(AppPermission.MANAGE_PURCHASES)) "Purchases" else strings.navFinance
             add(QuickModuleShortcut("finance", finLabel, Icons.Filled.AccountBalance, EmeraldSecondary))
+        }
+        if (session.has(AppPermission.VIEW_EMPLOYEES_BASIC) || session.has(AppPermission.MANAGE_EMPLOYEES)) {
+            add(QuickModuleShortcut("hr:employees", strings.employeeManagement, Icons.Filled.Badge, CyanAccent))
+        }
+        if (session.has(AppPermission.MARK_ATTENDANCE) || session.has(AppPermission.EDIT_ATTENDANCE) || session.has(AppPermission.VIEW_ATTENDANCE_REPORTS)) {
+            add(QuickModuleShortcut("hr:attendance", strings.attendanceManagement, Icons.Filled.EventAvailable, EmeraldSecondary))
+        }
+        if (session.has(AppPermission.VIEW_LEAVES) || session.has(AppPermission.MANAGE_LEAVES)) {
+            add(QuickModuleShortcut("hr:leaves", strings.leaveManagement, Icons.Filled.EventNote, AmberTertiary))
+        }
+        if (session.canViewSalaryAndPayroll && (session.has(AppPermission.VIEW_PAYROLL) || session.has(AppPermission.MANAGE_PAYROLL))) {
+            add(QuickModuleShortcut("hr:payroll", strings.payrollManagement, Icons.Filled.Payments, IndigoAccent))
+        }
+        if (session.has(AppPermission.VIEW_HR_REPORTS) || session.has(AppPermission.VIEW_ATTENDANCE_REPORTS) || session.canViewSalaryAndPayroll) {
+            add(QuickModuleShortcut("hr:reports", strings.hrReports, Icons.Filled.Assessment, VioletAccent))
         }
     }
 
