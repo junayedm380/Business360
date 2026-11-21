@@ -90,16 +90,16 @@ data class AppStrings(
 
 object Translations {
     val english = AppStrings(
-        appTitle = "CraftERP",
-        setupSuperAdminTitle = "Initialize Business ERP",
-        setupSuperAdminSubtitle = "Create the authoritative Super Admin account to configure your manufacturing, sales, and accounting workspace.",
+        appTitle = "Business360",
+        setupSuperAdminTitle = "Initialize Business360",
+        setupSuperAdminSubtitle = "All-in-One Business Management System — Manage Everything. Grow Everywhere.",
         businessNameLabel = "Business Name",
         fullNameLabel = "Full Name",
         emailLabel = "Email or Username",
         passwordLabel = "Password (min 6 chars)",
         createSuperAdminBtn = "Create Super Admin & Launch",
-        signInTitle = "Welcome to CraftERP",
-        signInSubtitle = "Sign in to access your role-verified operational or financial workspace.",
+        signInTitle = "Welcome to Business360",
+        signInSubtitle = "B360 • All-in-One Business Management System • Manage Everything. Grow Everywhere.",
         signInBtn = "Sign In",
         signOutBtn = "Sign Out",
         navDashboard = "Dashboard",
@@ -168,16 +168,16 @@ object Translations {
     )
 
     val bengali = AppStrings(
-        appTitle = "ক্রাফট ইআরপি",
-        setupSuperAdminTitle = "ব্যবসায়িক ইআরপি শুরু করুন",
-        setupSuperAdminSubtitle = "উৎপাদন, বিক্রয় এবং হিসাবরক্ষণের জন্য সুপার অ্যাডমিন অ্যাকাউন্ট তৈরি করুন।",
+        appTitle = "Business360",
+        setupSuperAdminTitle = "Business360 সেটআপ করুন",
+        setupSuperAdminSubtitle = "All-in-One Business Management System — Manage Everything. Grow Everywhere.",
         businessNameLabel = "প্রতিষ্ঠানের নাম",
         fullNameLabel = "পূর্ণ নাম",
         emailLabel = "ইমেইল বা ইউজারনেম",
         passwordLabel = "পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর)",
         createSuperAdminBtn = "সুপার অ্যাডমিন তৈরি করুন",
-        signInTitle = "ক্রাফট ইআরপি-তে স্বাগতম",
-        signInSubtitle = "আপনার নির্ধারিত ড্যাশবোর্ডে প্রবেশ করতে লগইন করুন।",
+        signInTitle = "Business360-তে স্বাগতম",
+        signInSubtitle = "B360 • All-in-One Business Management System • Manage Everything. Grow Everywhere.",
         signInBtn = "লগইন",
         signOutBtn = "লগআউট",
         navDashboard = "ড্যাশবোর্ড",

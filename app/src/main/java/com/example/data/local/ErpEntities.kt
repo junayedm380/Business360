@@ -38,7 +38,7 @@ data class AuditLogEntity(
 @Entity(tableName = "app_settings")
 data class AppSettingEntity(
     @PrimaryKey val id: String = "default",
-    val businessName: String = "CraftERP Industries",
+    val businessName: String = "Business360",
     val phone: String = "",
     val email: String = "",
     val address: String = "",

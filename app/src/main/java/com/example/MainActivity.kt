@@ -281,7 +281,11 @@ private fun AuthenticatedErpShell(
                             )
                             Spacer(Modifier.width(10.dp))
                             Column {
-                                Text(businessTitle, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                                Text(
+                                    text = if (businessTitle == "Business360") "Business360" else "$businessTitle • B360",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    maxLines = 1
+                                )
                                 RoleBadge(session.role)
                             }
                         }

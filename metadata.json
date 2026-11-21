@@ -1,6 +1,6 @@
 {
-  "name": "CraftERP",
-  "description": "Complete manufacturing, wholesale, retail, inventory, and double-entry accounting ERP application with role-based access control.",
+  "name": "Business360",
+  "description": "Business360 (B360) — All-in-One Business Management System. Manage Everything. Grow Everywhere.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

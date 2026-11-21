@@ -243,12 +243,12 @@ private fun AuthShell(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(170.dp)
+                        .height(190.dp)
                         .clip(MaterialTheme.shapes.large)
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.erp_hero_banner_1795274162661),
-                        contentDescription = "CraftERP Industrial Banner",
+                        contentDescription = "Business360 Brand Banner",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -257,7 +257,7 @@ private fun AuthShell(
                             .fillMaxSize()
                             .background(
                                 Brush.verticalGradient(
-                                    listOf(Color.Black.copy(alpha = 0.18f), Color(0xFF0F2942).copy(alpha = 0.88f))
+                                    listOf(Color.Black.copy(alpha = 0.20f), Color(0xFF01143F).copy(alpha = 0.92f))
                                 )
                             )
                             .padding(18.dp),
@@ -272,11 +272,23 @@ private fun AuthShell(
                                 contentDescription = "Business360 Logo",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(RoundedCornerShape(14.dp))
+                                    .size(70.dp)
+                                    .clip(RoundedCornerShape(16.dp))
                             )
                             Spacer(Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
+                                Surface(
+                                    color = Color.White.copy(alpha = 0.16f),
+                                    shape = RoundedCornerShape(50)
+                                ) {
+                                    Text(
+                                        text = "B360 • All-in-One Business Management System",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
                                 Text(
                                     text = heroTitle,
                                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
@@ -286,7 +298,7 @@ private fun AuthShell(
                                 Text(
                                     text = heroSubtitle,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.88f)
+                                    color = Color.White.copy(alpha = 0.90f)
                                 )
                             }
                         }

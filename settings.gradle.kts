@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "CraftERP"
+rootProject.name = "Business360"
 
 include(":app")
