@@ -1,6 +1,11 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -10,9 +15,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.AccountBalance
@@ -29,19 +38,32 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.data.local.EmployeeTaskEntity
 import com.example.data.local.PaymentSubmissionEntity
 import com.example.data.repository.ReportType
@@ -60,10 +82,26 @@ import com.example.ui.components.SectionCard
 import com.example.ui.components.SimpleBarChart
 import com.example.ui.components.StatusChip
 import com.example.ui.theme.AmberTertiary
+import com.example.ui.theme.CyanAccent
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.ErrorRed
-import com.example.ui.theme.NavyPrimary
+import com.example.ui.theme.HeroDeepStart
+import com.example.ui.theme.HeroEmeraldEnd
+import com.example.ui.theme.HeroSubtleLight
+import com.example.ui.theme.HeroTealMid
+import com.example.ui.theme.HeroTextLight
+import com.example.ui.theme.IndigoAccent
+import com.example.ui.theme.JetBrainsMonoFamily
+import com.example.ui.theme.RoseAccent
 import com.example.ui.theme.SuccessGreen
+import com.example.ui.theme.VioletAccent
+
+private data class QuickModuleShortcut(
+    val route: String,
+    val label: String,
+    val icon: ImageVector,
+    val color: Color
+)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -80,6 +118,26 @@ fun RoleBasedDashboardScreen(
     val ops = snapshot?.operational
     val fin = snapshot?.financial
 
+    val quickModules = buildList {
+        if (session.has(AppPermission.VIEW_PRODUCTION) || session.has(AppPermission.VIEW_PRODUCTS)) {
+            add(QuickModuleShortcut("production", strings.navProduction, Icons.Filled.Factory, VioletAccent))
+        }
+        if (session.has(AppPermission.VIEW_INVENTORY)) {
+            add(QuickModuleShortcut("inventory", strings.navInventory, Icons.Filled.Inventory2, CyanAccent))
+        }
+        if (session.has(AppPermission.CREATE_SALES) || session.has(AppPermission.VIEW_CUSTOMERS)) {
+            add(QuickModuleShortcut("sales", strings.navSales, Icons.Filled.PointOfSale, IndigoAccent))
+        }
+        if (session.has(AppPermission.SUBMIT_PAYMENT_COLLECTION) ||
+            session.has(AppPermission.APPROVE_PAYMENTS) ||
+            session.has(AppPermission.VIEW_SUPPLIERS) ||
+            session.has(AppPermission.SUBMIT_EXPENSE) ||
+            session.canViewFinancials
+        ) {
+            add(QuickModuleShortcut("finance", strings.navFinance, Icons.Filled.AccountBalance, EmeraldSecondary))
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -88,24 +146,60 @@ fun RoleBasedDashboardScreen(
     ) {
         item { Spacer(Modifier.height(4.dp)) }
 
+        // --- EXECUTIVE HERO HEADER CARD ---
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = session.fullName,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Text(
-                        text = session.email,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            ExecutiveHeroBanner(
+                session = session,
+                strings = strings,
+                snapshot = snapshot
+            )
+        }
+
+        // --- COLORFUL QUICK MODULE LAUNCHER ---
+        if (quickModules.isNotEmpty() && session.role != UserRole.EMPLOYEE) {
+            item {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(quickModules, key = { it.route }) { mod ->
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = mod.color.copy(alpha = 0.10f),
+                            border = BorderStroke(1.dp, mod.color.copy(alpha = 0.28f)),
+                            modifier = Modifier
+                                .clip(MaterialTheme.shapes.medium)
+                                .clickable { onNavigateTab(mod.route) }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(mod.color),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        mod.icon,
+                                        contentDescription = mod.label,
+                                        tint = HeroTextLight,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = mod.label,
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
                 }
-                RoleBadge(session.role)
             }
         }
 
@@ -118,12 +212,12 @@ fun RoleBasedDashboardScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     maxItemsInEachRow = 2
                 ) {
-                    KpiTile(strings.todaySales, Formatters.formatTaka(fin.todaySalesAmount), Icons.Filled.PointOfSale, NavyPrimary, modifier = Modifier.weight(1f), testTag = "kpi_today_sales")
-                    KpiTile(strings.monthlySales, Formatters.formatTaka(fin.monthlySalesAmount), Icons.Filled.TrendingUp, EmeraldSecondary, modifier = Modifier.weight(1f))
+                    KpiTile(strings.todaySales, Formatters.formatTaka(fin.todaySalesAmount), Icons.Filled.PointOfSale, IndigoAccent, modifier = Modifier.weight(1f), testTag = "kpi_today_sales")
+                    KpiTile(strings.monthlySales, Formatters.formatTaka(fin.monthlySalesAmount), Icons.Filled.TrendingUp, VioletAccent, modifier = Modifier.weight(1f))
                     KpiTile(strings.cashInHand, Formatters.formatTaka(fin.cashInHand), Icons.Filled.AccountBalanceWallet, SuccessGreen, modifier = Modifier.weight(1f), testTag = "kpi_cash_hand")
-                    KpiTile(strings.bankBalance, Formatters.formatTaka(fin.bankAndMobileBalance), Icons.Filled.AccountBalance, NavyPrimary, modifier = Modifier.weight(1f))
+                    KpiTile(strings.bankBalance, Formatters.formatTaka(fin.bankAndMobileBalance), Icons.Filled.AccountBalance, CyanAccent, modifier = Modifier.weight(1f))
                     KpiTile(strings.customerDue, Formatters.formatTaka(fin.totalCustomerDue), Icons.Filled.Payments, AmberTertiary, modifier = Modifier.weight(1f), testTag = "kpi_customer_due")
-                    KpiTile(strings.supplierPayable, Formatters.formatTaka(fin.totalSupplierPayable), Icons.Filled.AttachMoney, ErrorRed, modifier = Modifier.weight(1f))
+                    KpiTile(strings.supplierPayable, Formatters.formatTaka(fin.totalSupplierPayable), Icons.Filled.AttachMoney, RoseAccent, modifier = Modifier.weight(1f))
                     if (session.has(AppPermission.VIEW_PROFIT_LOSS)) {
                         KpiTile(strings.grossProfit, Formatters.formatTaka(fin.grossProfit), Icons.Filled.TrendingUp, EmeraldSecondary, modifier = Modifier.weight(1f))
                         KpiTile(strings.netProfit, Formatters.formatTaka(fin.netProfit), Icons.Filled.TrendingUp, if (fin.netProfit >= 0) SuccessGreen else ErrorRed, modifier = Modifier.weight(1f), testTag = "kpi_net_profit")
@@ -134,21 +228,23 @@ fun RoleBasedDashboardScreen(
             item {
                 SectionCard(
                     title = "${strings.accountingAndReports} (${strings.totalSales}: ${Formatters.formatTaka(fin.totalSalesAmount)})",
+                    accentColor = IndigoAccent,
                     actionLabel = strings.exportCsv,
                     onAction = { onExportReport(ReportType.FINANCIAL_PROFIT_LOSS) }
                 ) {
                     SimpleBarChart(
                         points = listOf(
-                            BarChartPoint("Sales", fin.totalSalesAmount, NavyPrimary),
+                            BarChartPoint("Sales", fin.totalSalesAmount, IndigoAccent),
                             BarChartPoint("COGS", fin.totalCogs, AmberTertiary),
-                            BarChartPoint("Expenses", fin.totalExpenses, ErrorRed),
+                            BarChartPoint("Expenses", fin.totalExpenses, RoseAccent),
                             BarChartPoint("Net Profit", fin.netProfit.coerceAtLeast(0.0), SuccessGreen)
                         )
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
+                        Button(
                             onClick = { onNavigateTab("finance") },
+                            colors = ButtonDefaults.buttonColors(containerColor = IndigoAccent),
                             modifier = Modifier.weight(1f).testTag("btn_pending_approvals")
                         ) {
                             Text("${strings.pendingApprovals}: ${fin.pendingPaymentApprovals + fin.pendingExpenseApprovals}")
@@ -186,25 +282,26 @@ fun RoleBasedDashboardScreen(
                     maxItemsInEachRow = 2
                 ) {
                     KpiTile(strings.todayProduction, Formatters.formatQty(ops.todayProductionQty, "u"), Icons.Filled.Factory, EmeraldSecondary, modifier = Modifier.weight(1f))
-                    KpiTile(strings.monthlyProduction, Formatters.formatQty(ops.monthlyProductionQty, "u"), Icons.Filled.PrecisionManufacturing, NavyPrimary, modifier = Modifier.weight(1f))
+                    KpiTile(strings.monthlyProduction, Formatters.formatQty(ops.monthlyProductionQty, "u"), Icons.Filled.PrecisionManufacturing, VioletAccent, modifier = Modifier.weight(1f))
                     KpiTile(strings.rawMaterialStock, Formatters.formatQty(ops.totalRawMaterialUnits), Icons.Filled.Inventory2, AmberTertiary, subtitle = "${ops.rawMaterialCount} types", modifier = Modifier.weight(1f))
                     KpiTile(strings.finishedGoodsStock, Formatters.formatQty(ops.totalFinishedGoodsUnits, "u"), Icons.Filled.CheckCircle, SuccessGreen, modifier = Modifier.weight(1f))
-                    KpiTile(strings.pendingDeliveries, ops.pendingDeliveriesCount.toString(), Icons.Filled.LocalShipping, AmberTertiary, subtitle = "${ops.todayOrdersCount} today", modifier = Modifier.weight(1f))
-                    KpiTile(strings.lowStockAlerts, (ops.lowStockRawMaterials.size + ops.lowStockModelsCount).toString(), Icons.Filled.Warning, ErrorRed, modifier = Modifier.weight(1f))
+                    KpiTile(strings.pendingDeliveries, ops.pendingDeliveriesCount.toString(), Icons.Filled.LocalShipping, CyanAccent, subtitle = "${ops.todayOrdersCount} today", modifier = Modifier.weight(1f))
+                    KpiTile(strings.lowStockAlerts, (ops.lowStockRawMaterials.size + ops.lowStockModelsCount).toString(), Icons.Filled.Warning, RoseAccent, modifier = Modifier.weight(1f))
                 }
             }
 
             item {
                 SectionCard(
                     title = "${strings.productionBatches} (${strings.goodProducts} vs ${strings.rejectedProducts})",
+                    accentColor = VioletAccent,
                     actionLabel = if (session.has(AppPermission.EXPORT_REPORTS)) strings.exportCsv else null,
                     onAction = { onExportReport(ReportType.OPERATIONAL_PRODUCTION) }
                 ) {
                     SimpleBarChart(
                         points = listOf(
                             BarChartPoint(strings.goodProducts, ops.totalGoodQty, SuccessGreen),
-                            BarChartPoint(strings.rejectedProducts, ops.totalRejectedQty, ErrorRed),
-                            BarChartPoint(strings.finishedGoodsStock, ops.totalFinishedGoodsUnits, NavyPrimary)
+                            BarChartPoint(strings.rejectedProducts, ops.totalRejectedQty, RoseAccent),
+                            BarChartPoint(strings.finishedGoodsStock, ops.totalFinishedGoodsUnits, CyanAccent)
                         )
                     )
                 }
@@ -227,19 +324,23 @@ fun RoleBasedDashboardScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         maxItemsInEachRow = 2
                     ) {
-                        KpiTile(strings.myTasks, ops.myPendingTasksCount.toString(), Icons.AutoMirrored.Filled.Assignment, NavyPrimary, modifier = Modifier.weight(1f))
+                        KpiTile(strings.myTasks, ops.myPendingTasksCount.toString(), Icons.AutoMirrored.Filled.Assignment, IndigoAccent, modifier = Modifier.weight(1f))
                         KpiTile(strings.pendingDeliveries, ops.pendingDeliveriesCount.toString(), Icons.Filled.LocalShipping, AmberTertiary, modifier = Modifier.weight(1f))
                     }
                 }
             }
             item {
-                SectionCard(title = strings.quickActions) {
+                SectionCard(title = strings.quickActions, accentColor = CyanAccent) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (session.has(AppPermission.CREATE_PRODUCTION)) {
-                            Button(onClick = { onNavigateTab("production") }, modifier = Modifier.testTag("emp_quick_prod")) {
+                            Button(
+                                onClick = { onNavigateTab("production") },
+                                colors = ButtonDefaults.buttonColors(containerColor = VioletAccent),
+                                modifier = Modifier.testTag("emp_quick_prod")
+                            ) {
                                 Text(strings.productionBatches)
                             }
                         }
@@ -257,7 +358,7 @@ fun RoleBasedDashboardScreen(
                 }
             }
             item {
-                SectionCard(title = "${strings.paymentCollection} (${mySubmissions.size})") {
+                SectionCard(title = "${strings.paymentCollection} (${mySubmissions.size})", accentColor = EmeraldSecondary) {
                     if (mySubmissions.isEmpty()) {
                         EmptyStateNotice(strings.noDataYet)
                     } else {
@@ -282,7 +383,7 @@ fun RoleBasedDashboardScreen(
 
         // --- 5. ASSIGNED TASKS & LOW STOCK ALERTS ---
         item {
-            SectionCard(title = strings.myTasks) {
+            SectionCard(title = strings.myTasks, accentColor = EmeraldSecondary) {
                 if (tasks.isEmpty()) {
                     EmptyStateNotice(strings.noDataYet)
                 } else {
@@ -312,7 +413,7 @@ fun RoleBasedDashboardScreen(
 
         if (ops != null && ops.lowStockRawMaterials.isNotEmpty()) {
             item {
-                SectionCard(title = strings.lowStockAlerts) {
+                SectionCard(title = strings.lowStockAlerts, accentColor = RoseAccent) {
                     ops.lowStockRawMaterials.forEach { mat ->
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -331,5 +432,187 @@ fun RoleBasedDashboardScreen(
         }
 
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun ExecutiveHeroBanner(
+    session: SessionUser,
+    strings: AppStrings,
+    snapshot: RoleDashboardSnapshot?
+) {
+    val fin = snapshot?.financial
+    val ops = snapshot?.operational
+    val initials = session.fullName
+        .trim()
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .take(2)
+        .joinToString("") { it.take(1).uppercase() }
+        .ifBlank { "U" }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(HeroDeepStart, HeroTealMid, HeroEmeraldEnd)
+                    )
+                )
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.erp_hero_banner_1795274162661),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .matchParentSize()
+                    .alpha(0.18f)
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape)
+                                .background(HeroTextLight.copy(alpha = 0.20f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = initials,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = HeroTextLight
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = session.fullName,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = HeroTextLight,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = session.email,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = HeroSubtleLight,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Column(horizontalAlignment = Alignment.End) {
+                        RoleBadge(session.role, onDarkBackground = true)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = Formatters.formatDate(System.currentTimeMillis()),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFamily),
+                            color = HeroSubtleLight
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if ((session.role == UserRole.SUPER_ADMIN || session.role == UserRole.ADMIN) && fin != null) {
+                        HeroHighlightPill(
+                            label = strings.todaySales,
+                            value = Formatters.formatTaka(fin.todaySalesAmount),
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (session.has(AppPermission.VIEW_PROFIT_LOSS)) {
+                            HeroHighlightPill(
+                                label = strings.netProfit,
+                                value = Formatters.formatTaka(fin.netProfit),
+                                modifier = Modifier.weight(1f)
+                            )
+                        } else {
+                            HeroHighlightPill(
+                                label = strings.cashInHand,
+                                value = Formatters.formatTaka(fin.cashInHand + fin.bankAndMobileBalance),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else if (ops != null) {
+                        if (session.role == UserRole.MODERATOR_MANAGER) {
+                            HeroHighlightPill(
+                                label = strings.todayProduction,
+                                value = Formatters.formatQty(ops.todayProductionQty, "u"),
+                                modifier = Modifier.weight(1f)
+                            )
+                        } else {
+                            HeroHighlightPill(
+                                label = strings.myTasks,
+                                value = ops.myPendingTasksCount.toString(),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        HeroHighlightPill(
+                            label = strings.pendingDeliveries,
+                            value = ops.pendingDeliveriesCount.toString(),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroHighlightPill(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        color = HeroTextLight.copy(alpha = 0.14f),
+        border = BorderStroke(1.dp, HeroTextLight.copy(alpha = 0.22f)),
+        shape = MaterialTheme.shapes.small
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = HeroSubtleLight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = JetBrainsMonoFamily,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = HeroTextLight,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }

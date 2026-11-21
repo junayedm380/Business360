@@ -36,6 +36,17 @@ val WarningContainer = Color(0xFFFEF3C7)
 val ErrorRed = Color(0xFFDC2626)
 val ErrorContainer = Color(0xFFFEE2E2)
 
+// Vibrant Dashboard Executive Accents
+val IndigoAccent = Color(0xFF4F46E5)
+val CyanAccent = Color(0xFF0891B2)
+val VioletAccent = Color(0xFF7C3AED)
+val RoseAccent = Color(0xFFE11D48)
+val HeroDeepStart = Color(0xFF091E34)
+val HeroTealMid = Color(0xFF0F4C5C)
+val HeroEmeraldEnd = Color(0xFF0D9488)
+val HeroTextLight = Color(0xFFFFFFFF)
+val HeroSubtleLight = Color(0xFFE2E8F0)
+
 // Dark Theme Palette
 val DarkPrimary = Color(0xFF93C5FD)
 val DarkOnPrimary = Color(0xFF082038)

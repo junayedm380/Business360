@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,18 +33,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.domain.UserRole
+import com.example.ui.theme.CyanAccent
 import com.example.ui.theme.ErrorContainer
 import com.example.ui.theme.ErrorRed
+import com.example.ui.theme.IndigoAccent
 import com.example.ui.theme.JetBrainsMonoFamily
 import com.example.ui.theme.SuccessContainer
 import com.example.ui.theme.SuccessGreen
+import com.example.ui.theme.VioletAccent
 import com.example.ui.theme.WarningAmber
 import com.example.ui.theme.WarningContainer
 
@@ -57,56 +63,86 @@ fun KpiTile(
     modifier: Modifier = Modifier,
     testTag: String = ""
 ) {
+    val surfaceColor = MaterialTheme.colorScheme.surface
     Card(
         modifier = modifier.then(if (testTag.isNotBlank()) Modifier.testTag(testTag) else Modifier),
         shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        colors = CardDefaults.cardColors(containerColor = surfaceColor),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.24f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = 0.14f),
+                            accentColor.copy(alpha = 0.04f),
+                            surfaceColor
+                        )
+                    )
                 )
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Crisp top color bar
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(accentColor.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = title, tint = accentColor, modifier = Modifier.size(18.dp))
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontFamily = JetBrainsMonoFamily,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (!subtitle.isNullOrBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(accentColor, accentColor.copy(alpha = 0.45f))
+                            )
+                        )
                 )
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(accentColor.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(icon, contentDescription = title, tint = accentColor, modifier = Modifier.size(19.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontFamily = JetBrainsMonoFamily,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (!subtitle.isNullOrBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                            color = accentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
     }
@@ -116,6 +152,7 @@ fun KpiTile(
 fun SectionCard(
     title: String,
     modifier: Modifier = Modifier,
+    accentColor: Color = MaterialTheme.colorScheme.secondary,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
@@ -124,7 +161,8 @@ fun SectionCard(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -132,23 +170,40 @@ fun SectionCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                if (actionLabel != null && onAction != null) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(18.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(accentColor)
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = actionLabel,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable(onClick = onAction)
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface
                     )
+                }
+                if (actionLabel != null && onAction != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        color = accentColor.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onAction)
+                    ) {
+                        Text(
+                            text = actionLabel,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = accentColor,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -176,7 +231,7 @@ fun StatusChip(status: String) {
 }
 
 @Composable
-fun RoleBadge(role: UserRole) {
+fun RoleBadge(role: UserRole, onDarkBackground: Boolean = false) {
     val label = when (role) {
         UserRole.SUPER_ADMIN -> "SUPER ADMIN"
         UserRole.ADMIN -> "ADMIN"
@@ -184,20 +239,23 @@ fun RoleBadge(role: UserRole) {
         UserRole.EMPLOYEE -> "EMPLOYEE"
     }
     val color = when (role) {
-        UserRole.SUPER_ADMIN -> MaterialTheme.colorScheme.primary
-        UserRole.ADMIN -> MaterialTheme.colorScheme.secondary
-        UserRole.MODERATOR_MANAGER -> MaterialTheme.colorScheme.tertiary
-        UserRole.EMPLOYEE -> MaterialTheme.colorScheme.onSurfaceVariant
+        UserRole.SUPER_ADMIN -> VioletAccent
+        UserRole.ADMIN -> IndigoAccent
+        UserRole.MODERATOR_MANAGER -> CyanAccent
+        UserRole.EMPLOYEE -> MaterialTheme.colorScheme.secondary
     }
+    val bgColor = if (onDarkBackground) Color.White.copy(alpha = 0.18f) else color.copy(alpha = 0.14f)
+    val textColor = if (onDarkBackground) Color.White else color
     Surface(
-        color = color.copy(alpha = 0.14f),
-        shape = RoundedCornerShape(6.dp)
+        color = bgColor,
+        border = if (onDarkBackground) BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)) else null,
+        shape = RoundedCornerShape(8.dp)
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = color,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+            color = textColor,
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
         )
     }
 }
@@ -206,16 +264,34 @@ fun RoleBadge(role: UserRole) {
 fun RestrictedBanner(message: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f)),
         shape = MaterialTheme.shapes.small
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Outlined.Lock, contentDescription = "Restricted", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Outlined.Lock,
+                    contentDescription = "Restricted",
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
             Spacer(Modifier.width(10.dp))
-            Text(text = message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
@@ -243,35 +319,83 @@ fun SimpleBarChart(
 ) {
     if (points.isEmpty()) return
     val maxVal = (points.maxOfOrNull { it.value } ?: 1.0).coerceAtLeast(1.0)
+    val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     Column(modifier = modifier.fillMaxWidth()) {
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(140.dp)
-                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .height(152.dp)
+                .padding(horizontal = 8.dp, vertical = 8.dp)
         ) {
+            val dashEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
+            listOf(0.25f, 0.5f, 0.75f).forEach { fraction ->
+                val y = size.height * fraction
+                drawLine(
+                    color = gridColor,
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = dashEffect
+                )
+            }
+            // Baseline
+            drawLine(
+                color = gridColor,
+                start = Offset(0f, size.height),
+                end = Offset(size.width, size.height),
+                strokeWidth = 1.5.dp.toPx()
+            )
+
             val barSlot = size.width / points.size
-            val barWidth = (barSlot * 0.52f).coerceAtMost(44.dp.toPx())
+            val barWidth = (barSlot * 0.50f).coerceAtMost(46.dp.toPx())
             points.forEachIndexed { idx, pt ->
                 val ratio = (pt.value / maxVal).toFloat().coerceIn(0f, 1f)
-                val barHeight = (size.height - 8.dp.toPx()) * ratio
+                val barHeight = ((size.height - 10.dp.toPx()) * ratio).coerceAtLeast(6.dp.toPx())
                 val left = idx * barSlot + (barSlot - barWidth) / 2f
                 val top = size.height - barHeight
+                // Soft glow backing
                 drawRoundRect(
-                    color = pt.color,
+                    color = pt.color.copy(alpha = 0.10f),
+                    topLeft = Offset(left - 2.dp.toPx(), 4.dp.toPx()),
+                    size = Size(barWidth + 4.dp.toPx(), size.height - 4.dp.toPx()),
+                    cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
+                )
+                // Gradient bar
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(pt.color, pt.color.copy(alpha = 0.68f)),
+                        startY = top,
+                        endY = size.height
+                    ),
                     topLeft = Offset(left, top),
-                    size = Size(barWidth, barHeight.coerceAtLeast(4.dp.toPx())),
-                    cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
+                    size = Size(barWidth, barHeight),
+                    cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
                 )
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
             points.forEach { pt ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(pt.color))
-                    Spacer(Modifier.width(4.dp))
-                    Text(pt.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Surface(
+                    color = pt.color.copy(alpha = 0.10f),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(pt.color))
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            text = pt.label,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
