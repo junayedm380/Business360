@@ -135,9 +135,11 @@ fun SectionCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
                 if (actionLabel != null && onAction != null) {
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         text = actionLabel,
                         style = MaterialTheme.typography.labelLarge,
@@ -145,7 +147,7 @@ fun SectionCard(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .clickable(onClick = onAction)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     )
                 }
             }

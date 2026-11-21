@@ -115,23 +115,36 @@ class OperationsRepository(private val db: ErpDatabase) {
         category: String,
         description: String,
         unit: String,
-        imageUri: String = ""
+        imageUri: String = "",
+        existingId: String? = null
     ): Result<ProductEntity> = try {
         if (!actor.has(AppPermission.MANAGE_PRODUCTS)) throw ErpSecurityException("Product management permission required")
         require(name.isNotBlank()) { "Product name is required" }
+        val existing = existingId?.let {
+            dao.getProductById(it) ?: throw IllegalArgumentException("Product not found")
+        }
         val product = ProductEntity(
+            id = existing?.id ?: UUID.randomUUID().toString(),
             name = name.trim(),
             category = category.trim().ifBlank { "General" },
             description = description.trim(),
             unit = unit.trim().ifBlank { "pcs" },
-            imageUri = imageUri
+            imageUri = imageUri.ifBlank { existing?.imageUri ?: "" },
+            status = existing?.status ?: "ACTIVE",
+            createdAt = existing?.createdAt ?: System.currentTimeMillis()
         )
         db.withTransaction {
             dao.upsertProduct(product)
             dao.insertAuditLog(
                 AuditLogEntity(
-                    userId = actor.id, userName = actor.fullName, userRole = actor.role.name,
-                    action = "CREATE_PRODUCT", module = "PRODUCTS", recordId = product.id, newValue = product.name
+                    userId = actor.id,
+                    userName = actor.fullName,
+                    userRole = actor.role.name,
+                    action = if (existing == null) "CREATE_PRODUCT" else "UPDATE_PRODUCT",
+                    module = "PRODUCTS",
+                    recordId = product.id,
+                    previousValue = existing?.name ?: "",
+                    newValue = product.name
                 )
             )
         }

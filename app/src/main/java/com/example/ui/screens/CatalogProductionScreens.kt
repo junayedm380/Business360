@@ -80,7 +80,7 @@ fun CatalogProductionScreen(
     rawMaterials: List<RawMaterialEntity>,
     warehouses: List<WarehouseEntity>,
     batches: List<ProductionBatchEntity>,
-    onSaveProduct: (String, String, String, String, String) -> Unit,
+    onSaveProduct: (String?, String, String, String, String, String) -> Unit,
     onSaveModel: (String?, String, String, String, String, Double, Double, Double, Double, String) -> Unit,
     onSaveBom: (String, String, Double) -> Unit,
     onDeleteBom: (String) -> Unit,
@@ -89,7 +89,8 @@ fun CatalogProductionScreen(
     onAdvanceBatch: (String, String) -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    var showProductDialog by remember { mutableStateOf(false) }
+    var showNewProductDialog by remember { mutableStateOf(false) }
+    var editingProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var showModelDialog by remember { mutableStateOf<ProductModelEntity?>(null) }
     var showNewModelDialog by remember { mutableStateOf(false) }
     var showBomDialogForModel by remember { mutableStateOf<ProductModelEntity?>(null) }
@@ -169,7 +170,7 @@ fun CatalogProductionScreen(
                     item {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (session.has(AppPermission.MANAGE_PRODUCTS)) {
-                                Button(onClick = { showProductDialog = true }, modifier = Modifier.weight(1f).testTag("btn_add_product")) {
+                                Button(onClick = { showNewProductDialog = true }, modifier = Modifier.weight(1f).testTag("btn_add_product")) {
                                     Text("+ Product")
                                 }
                                 FilledTonalButton(
@@ -187,7 +188,13 @@ fun CatalogProductionScreen(
                     } else {
                         items(products, key = { it.id }) { prod ->
                             val prodModels = models.filter { it.productId == prod.id }
-                            SectionCard(title = "${prod.name} (${prod.category})") {
+                            SectionCard(
+                                title = "${prod.name} (${prod.category})",
+                                actionLabel = if (session.has(AppPermission.MANAGE_PRODUCTS)) "Edit" else null,
+                                onAction = if (session.has(AppPermission.MANAGE_PRODUCTS)) {
+                                    { editingProduct = prod }
+                                } else null
+                            ) {
                                 if (prod.description.isNotBlank()) {
                                     Text(prod.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Spacer(Modifier.height(8.dp))
@@ -271,11 +278,19 @@ fun CatalogProductionScreen(
         }
     }
 
-    if (showProductDialog) {
-        ProductFormDialog(onDismiss = { showProductDialog = false }) { name, cat, desc, unit, img ->
-            onSaveProduct(name, cat, desc, unit, img)
-            showProductDialog = false
-        }
+    if (showNewProductDialog || editingProduct != null) {
+        ProductFormDialog(
+            existing = editingProduct,
+            onDismiss = {
+                showNewProductDialog = false
+                editingProduct = null
+            },
+            onSave = { exId, name, cat, desc, unit, img ->
+                onSaveProduct(exId, name, cat, desc, unit, img)
+                showNewProductDialog = false
+                editingProduct = null
+            }
+        )
     }
 
     if (showNewModelDialog || showModelDialog != null) {
@@ -323,23 +338,58 @@ fun CatalogProductionScreen(
 }
 
 @Composable
-private fun ProductFormDialog(onDismiss: () -> Unit, onSave: (String, String, String, String, String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Apparel") }
-    var description by remember { mutableStateOf("") }
-    var unit by remember { mutableStateOf("pcs") }
+private fun ProductFormDialog(
+    existing: ProductEntity?,
+    onDismiss: () -> Unit,
+    onSave: (String?, String, String, String, String, String) -> Unit
+) {
+    var name by remember(existing?.id) { mutableStateOf(existing?.name ?: "") }
+    var category by remember(existing?.id) { mutableStateOf(existing?.category ?: "Apparel") }
+    var description by remember(existing?.id) { mutableStateOf(existing?.description ?: "") }
+    var unit by remember(existing?.id) { mutableStateOf(existing?.unit ?: "pcs") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Product") },
+        title = { Text(if (existing == null) "New Product" else "Edit Product") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Product Name") }, singleLine = true)
-                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, singleLine = true)
-                OutlinedTextField(value = unit, onValueChange = { unit = it }, label = { Text("Unit (pcs, box, kg)") }, singleLine = true)
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") })
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Product Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("product_name_input")
+                )
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it },
+                    label = { Text("Category") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = unit,
+                    onValueChange = { unit = it },
+                    label = { Text("Unit (pcs, box, kg)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description") },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
-        confirmButton = { Button(onClick = { onSave(name, category, description, unit, "") }) { Text("Save") } },
+        confirmButton = {
+            Button(
+                onClick = { onSave(existing?.id, name, category, description, unit, existing?.imageUri ?: "") },
+                enabled = name.isNotBlank(),
+                modifier = Modifier.testTag("save_product_button")
+            ) {
+                Text("Save")
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

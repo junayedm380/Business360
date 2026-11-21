@@ -91,6 +91,12 @@ class ErpAcceptanceSecurityTest {
 
         // 1. Setup product, model, raw material & BOM
         val prod = opsRepo.saveProduct(admin, "Cotton Polo", "Apparel", "Premium polo", "pcs").getOrThrow()
+        // Edit product name & verify ID is preserved and Employee is blocked
+        val editedProd = opsRepo.saveProduct(admin, "Premium Cotton Polo", "Apparel", "Premium polo", "pcs", "", prod.id).getOrThrow()
+        assertEquals(prod.id, editedProd.id)
+        assertEquals("Premium Cotton Polo", db.erpDao().getProductById(prod.id)!!.name)
+        assertTrue(opsRepo.saveProduct(emp, "Hacked Name", "Apparel", "", "pcs", "", prod.id).exceptionOrNull() is ErpSecurityException)
+
         val model = opsRepo.saveProductModel(admin, null, prod.id, "Polo Classic", "PC-01", "", 200.0, 350.0, 500.0, 5.0).getOrThrow()
         val raw = opsRepo.saveRawMaterial(admin, "Cotton Yarn", "CY-01", "Fabric", "kg", 100.0, "wh_main", 50.0, 5.0).getOrThrow()
         opsRepo.saveBomItem(admin, model.id, raw.id, 0.5).getOrThrow()

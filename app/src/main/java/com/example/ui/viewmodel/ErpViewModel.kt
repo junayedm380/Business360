@@ -308,8 +308,16 @@ class ErpViewModel(
         }
     }
 
-    fun saveProduct(name: String, category: String, description: String, unit: String, imageUri: String) =
-        withSession({ opsRepo.saveProduct(it, name, category, description, unit, imageUri) }, "Product saved")
+    fun saveProduct(
+        existingId: String?,
+        name: String,
+        category: String,
+        description: String,
+        unit: String,
+        imageUri: String
+    ) = withSession({
+        opsRepo.saveProduct(it, name, category, description, unit, imageUri, existingId)
+    }, if (existingId == null) "Product saved" else "Product updated")
 
     fun saveProductModel(
         existingId: String?, productId: String, modelName: String, modelCode: String,
