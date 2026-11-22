@@ -334,28 +334,46 @@ class OperationsRepository(private val db: ErpDatabase) {
         purchasePrice: Double,
         warehouseId: String,
         initialQty: Double,
-        minimumStock: Double
+        minimumStock: Double,
+        existingId: String? = null
     ): Result<RawMaterialEntity> = try {
         if (!actor.has(AppPermission.MANAGE_RAW_MATERIALS)) throw ErpSecurityException("Raw material permission required")
         require(name.isNotBlank() && materialCode.isNotBlank()) { "Material name and code required" }
-        require(initialQty >= 0 && purchasePrice >= 0) { "Quantity and price must be non-negative" }
+        require(initialQty >= 0 && purchasePrice >= 0 && minimumStock >= 0) { "Quantity, minimum stock, and price must be non-negative" }
+
+        val cleanCode = materialCode.trim().uppercase()
+        val existing = existingId?.let { dao.getRawMaterialById(it) ?: throw IllegalArgumentException("Raw material not found") }
+        val collision = dao.getRawMaterialByCode(cleanCode)
+        if (collision != null && collision.id != existing?.id) {
+            throw IllegalArgumentException("Raw material code '$cleanCode' is already in use")
+        }
+
+        val canSeePrice = actor.canViewCosting || actor.has(AppPermission.VIEW_PURCHASE_PRICES)
+        val effectivePrice = if (canSeePrice) Formatters.roundMoney(purchasePrice) else (existing?.purchasePrice ?: 0.0)
+        val nextQty = Formatters.roundQty(initialQty)
+        val effectiveWarehouse = warehouseId.ifBlank { existing?.warehouseId ?: "wh_main" }
+
         val mat = RawMaterialEntity(
+            id = existing?.id ?: UUID.randomUUID().toString(),
             name = name.trim(),
-            materialCode = materialCode.trim().uppercase(),
+            materialCode = cleanCode,
             category = category.trim().ifBlank { "Raw Material" },
             unit = unit.trim().ifBlank { "kg" },
-            purchasePrice = Formatters.roundMoney(purchasePrice),
-            warehouseId = warehouseId,
-            availableQuantity = Formatters.roundQty(initialQty),
-            minimumStock = Formatters.roundQty(minimumStock)
+            purchasePrice = effectivePrice,
+            supplierId = existing?.supplierId ?: "",
+            warehouseId = effectiveWarehouse,
+            availableQuantity = nextQty,
+            minimumStock = Formatters.roundQty(minimumStock),
+            status = existing?.status ?: "ACTIVE",
+            createdAt = existing?.createdAt ?: System.currentTimeMillis()
         )
         db.withTransaction {
             dao.upsertRawMaterial(mat)
-            if (initialQty > 0) {
+            if (existing == null && nextQty > 0) {
                 dao.insertMaterialLedger(
                     MaterialLedgerEntity(
                         rawMaterialId = mat.id,
-                        warehouseId = warehouseId,
+                        warehouseId = effectiveWarehouse,
                         movementType = "OPENING",
                         quantityDelta = mat.availableQuantity,
                         balanceAfter = mat.availableQuantity,
@@ -364,15 +382,35 @@ class OperationsRepository(private val db: ErpDatabase) {
                         notes = "Opening stock"
                     )
                 )
+            } else if (existing != null && kotlin.math.abs(nextQty - existing.availableQuantity) >= 0.0001) {
+                val delta = Formatters.roundQty(nextQty - existing.availableQuantity)
+                dao.insertMaterialLedger(
+                    MaterialLedgerEntity(
+                        rawMaterialId = mat.id,
+                        warehouseId = effectiveWarehouse,
+                        movementType = "ADJUSTMENT",
+                        quantityDelta = delta,
+                        balanceAfter = mat.availableQuantity,
+                        referenceDoc = mat.materialCode,
+                        userId = actor.id,
+                        notes = "Raw material edit (${Formatters.formatQty(existing.availableQuantity, existing.unit)} -> ${Formatters.formatQty(nextQty, mat.unit)})"
+                    )
+                )
             }
             dao.insertAuditLog(
                 AuditLogEntity(
-                    userId = actor.id, userName = actor.fullName, userRole = actor.role.name,
-                    action = "CREATE_RAW_MATERIAL", module = "RAW_MATERIALS", recordId = mat.id, newValue = mat.name
+                    userId = actor.id,
+                    userName = actor.fullName,
+                    userRole = actor.role.name,
+                    action = if (existing == null) "CREATE_RAW_MATERIAL" else "UPDATE_RAW_MATERIAL",
+                    module = "RAW_MATERIALS",
+                    recordId = mat.id,
+                    previousValue = existing?.let { "${it.name} (${it.materialCode}) Qty=${it.availableQuantity}" } ?: "",
+                    newValue = "${mat.name} (${mat.materialCode}) Qty=${mat.availableQuantity}"
                 )
             )
         }
-        Result.success(mat)
+        Result.success(if (canSeePrice) mat else mat.copy(purchasePrice = 0.0))
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

@@ -417,6 +417,17 @@ class HrPayrollIntegrationTest {
         assertEquals(3000.0, adv.remainingBalance, 0.001)
         assertEquals(197000.0, db.erpDao().getCashAccountById("acct_cash")!!.currentBalance, 0.001)
 
+        // Configure 30-day payroll rule (verifies configurable rules: 30,000 / 30 = 1,000/day)
+        hrPayrollRepo.updatePayrollConfig(
+            actor = superAdmin,
+            workingDaysPerMonth = 30,
+            absentDeductionRate = 1.0,
+            halfDayDeductionRate = 0.5,
+            lateDaysPerHalfDayDeduction = 0,
+            overtimeHourlyMultiplier = 1.5,
+            deductUnpaidLeave = true
+        ).getOrThrow()
+
         // Generate payroll for 2026-05 with 2,000 bonus
         val runs = hrPayrollRepo.generateMonthlyPayroll(superAdmin, monthKey, defaultBonus = 2000.0, otherDeduction = 0.0, notes = "May payroll").getOrThrow()
         val slip = runs.first { it.employeeId == emp.id }

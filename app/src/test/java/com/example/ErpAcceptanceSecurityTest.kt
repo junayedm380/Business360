@@ -286,4 +286,39 @@ class ErpAcceptanceSecurityTest {
             assertEquals(je.totalDebit, je.totalCredit, 0.01)
         }
     }
+
+    @Test
+    fun `raw material editing updates fields adjusts material ledger and prevents duplicate code`() = runTest {
+        val superAdmin = authRepo.claimInitialSuperAdmin("Business360", "Owner", "owner@b360.bd", "secret123").getOrThrow()
+        authRepo.createUser(superAdmin, "Prod Staff", "emp@b360.bd", "secret123", UserRole.EMPLOYEE).getOrThrow()
+        val emp = authRepo.login("emp@b360.bd", "secret123").getOrThrow()
+
+        val raw1 = opsRepo.saveRawMaterial(superAdmin, "Cotton Thread", "RM-101", "Trim", "cone", 80.0, "wh_main", 50.0, 10.0).getOrThrow()
+        opsRepo.saveRawMaterial(superAdmin, "Zipper 8in", "RM-102", "Hardware", "pcs", 15.0, "wh_main", 200.0, 20.0).getOrThrow()
+
+        // Edit existing raw material: update name, code, category, unit, price, quantity (50 -> 75), minStock
+        val updated = opsRepo.saveRawMaterial(
+            superAdmin, "Organic Cotton Thread", "RM-101A", "Organic Trim", "spool",
+            95.0, "wh_main", 75.0, 15.0, raw1.id
+        ).getOrThrow()
+        assertEquals(raw1.id, updated.id)
+        assertEquals("Organic Cotton Thread", updated.name)
+        assertEquals("RM-101A", updated.materialCode)
+        assertEquals(75.0, updated.availableQuantity, 0.001)
+        assertEquals(95.0, updated.purchasePrice, 0.001)
+        assertEquals(15.0, updated.minimumStock, 0.001)
+
+        val ledger = db.erpDao().observeMaterialLedger().first().filter { it.rawMaterialId == raw1.id }
+        assertTrue(ledger.any { it.movementType == "ADJUSTMENT" && kotlin.math.abs(it.quantityDelta - 25.0) < 0.001 })
+
+        // Duplicate code collision rejected cleanly
+        val dupResult = opsRepo.saveRawMaterial(superAdmin, "Organic Cotton Thread", "RM-102", "Organic Trim", "spool", 95.0, "wh_main", 75.0, 15.0, raw1.id)
+        assertTrue(dupResult.isFailure)
+
+        // Employee cannot edit raw materials
+        assertTrue(
+            opsRepo.saveRawMaterial(emp, "Hack", "RM-101A", "Trim", "spool", 1.0, "wh_main", 999.0, 1.0, raw1.id)
+                .exceptionOrNull() is ErpSecurityException
+        )
+    }
 }

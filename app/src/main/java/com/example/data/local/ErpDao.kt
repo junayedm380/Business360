@@ -109,6 +109,9 @@ interface ErpDao {
     @Query("SELECT * FROM raw_materials WHERE id = :id LIMIT 1")
     suspend fun getRawMaterialById(id: String): RawMaterialEntity?
 
+    @Query("SELECT * FROM raw_materials WHERE LOWER(materialCode) = LOWER(:code) LIMIT 1")
+    suspend fun getRawMaterialByCode(code: String): RawMaterialEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertRawMaterial(material: RawMaterialEntity)
 

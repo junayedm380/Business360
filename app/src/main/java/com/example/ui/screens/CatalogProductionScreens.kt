@@ -84,7 +84,7 @@ fun CatalogProductionScreen(
     onSaveModel: (String?, String, String, String, String, Double, Double, Double, Double, String) -> Unit,
     onSaveBom: (String, String, Double) -> Unit,
     onDeleteBom: (String) -> Unit,
-    onSaveRawMaterial: (String, String, String, String, Double, String, Double, Double) -> Unit,
+    onSaveRawMaterial: (String?, String, String, String, String, Double, String, Double, Double) -> Unit,
     onCreateBatch: (String, String, Double, Double, Double, Double, Double, Double, Double, Double, String) -> Unit,
     onEditBatch: (String, String, String, Double, Double, Double, Double, Double, Double, Double, Double, String) -> Unit,
     onAdvanceBatch: (String, String) -> Unit
@@ -101,7 +101,8 @@ fun CatalogProductionScreen(
     var showModelDialog by remember { mutableStateOf<ProductModelEntity?>(null) }
     var showNewModelDialog by remember { mutableStateOf(false) }
     var showBomDialogForModel by remember { mutableStateOf<ProductModelEntity?>(null) }
-    var showRawDialog by remember { mutableStateOf(false) }
+    var showNewRawDialog by remember { mutableStateOf(false) }
+    var editingRawMaterial by remember { mutableStateOf<RawMaterialEntity?>(null) }
     var showBatchDialog by remember { mutableStateOf(false) }
     var editingBatch by remember { mutableStateOf<ProductionBatchEntity?>(null) }
 
@@ -282,7 +283,7 @@ fun CatalogProductionScreen(
                     item {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             if (session.has(AppPermission.MANAGE_RAW_MATERIALS)) {
-                                Button(onClick = { showRawDialog = true }, modifier = Modifier.testTag("btn_add_raw_material")) {
+                                Button(onClick = { showNewRawDialog = true }, modifier = Modifier.testTag("btn_add_raw_material")) {
                                     Icon(Icons.Filled.Add, contentDescription = null)
                                     Spacer(Modifier.width(6.dp))
                                     Text("Add Raw Material")
@@ -294,9 +295,16 @@ fun CatalogProductionScreen(
                         item { EmptyStateNotice(strings.noDataYet) }
                     } else {
                         items(rawMaterials, key = { it.id }) { mat ->
-                            SectionCard(title = "${mat.name} (${mat.materialCode})") {
+                            val whName = warehouses.firstOrNull { it.id == mat.warehouseId }?.name ?: "Default Warehouse"
+                            SectionCard(
+                                title = "${mat.name} (${mat.materialCode})",
+                                actionLabel = if (session.has(AppPermission.MANAGE_RAW_MATERIALS)) "Edit" else null,
+                                onAction = if (session.has(AppPermission.MANAGE_RAW_MATERIALS)) {
+                                    { editingRawMaterial = mat }
+                                } else null
+                            ) {
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Category: ${mat.category}", style = MaterialTheme.typography.bodySmall)
+                                    Text("Category: ${mat.category} • $whName", style = MaterialTheme.typography.bodySmall)
                                     Text(
                                         "${Formatters.formatQty(mat.availableQuantity, mat.unit)} (Min ${Formatters.formatQty(mat.minimumStock)})",
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
@@ -355,11 +363,21 @@ fun CatalogProductionScreen(
         }
     }
 
-    if (showRawDialog) {
-        RawMaterialFormDialog(warehouses = warehouses, onDismiss = { showRawDialog = false }) { name, code, cat, unit, price, whId, initQty, minStk ->
-            onSaveRawMaterial(name, code, cat, unit, price, whId, initQty, minStk)
-            showRawDialog = false
-        }
+    if (showNewRawDialog || editingRawMaterial != null) {
+        RawMaterialFormDialog(
+            session = session,
+            existing = editingRawMaterial,
+            warehouses = warehouses,
+            onDismiss = {
+                showNewRawDialog = false
+                editingRawMaterial = null
+            },
+            onSave = { exId, name, code, cat, unit, price, whId, qtyVal, minStk ->
+                onSaveRawMaterial(exId, name, code, cat, unit, price, whId, qtyVal, minStk)
+                showNewRawDialog = false
+                editingRawMaterial = null
+            }
+        )
     }
 
     if ((showBatchDialog || editingBatch != null) && models.isNotEmpty() && warehouses.isNotEmpty()) {
@@ -571,39 +589,120 @@ private fun BomConfigDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RawMaterialFormDialog(
+    session: SessionUser,
+    existing: RawMaterialEntity?,
     warehouses: List<WarehouseEntity>,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, String, Double, String, Double, Double) -> Unit
+    onSave: (String?, String, String, String, String, Double, String, Double, Double) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
-    var cat by remember { mutableStateOf("Fabric") }
-    var unit by remember { mutableStateOf("kg") }
-    var price by remember { mutableStateOf("0") }
-    var qty by remember { mutableStateOf("0") }
-    var minStock by remember { mutableStateOf("10") }
-    val whId = warehouses.firstOrNull()?.id ?: "wh_main"
+    var name by remember(existing?.id) { mutableStateOf(existing?.name ?: "") }
+    var code by remember(existing?.id) { mutableStateOf(existing?.materialCode ?: "") }
+    var cat by remember(existing?.id) { mutableStateOf(existing?.category ?: "Fabric") }
+    var unit by remember(existing?.id) { mutableStateOf(existing?.unit ?: "kg") }
+    var price by remember(existing?.id) { mutableStateOf(existing?.purchasePrice?.toString() ?: "0") }
+    var qty by remember(existing?.id) { mutableStateOf(existing?.availableQuantity?.toString() ?: "0") }
+    var minStock by remember(existing?.id) { mutableStateOf(existing?.minimumStock?.toString() ?: "10") }
+    var selectedWh by remember(existing?.id) {
+        mutableStateOf(warehouses.firstOrNull { it.id == existing?.warehouseId } ?: warehouses.firstOrNull())
+    }
+    var whExpanded by remember { mutableStateOf(false) }
+    val canSeePrice = session.canViewCosting || session.has(AppPermission.VIEW_PURCHASE_PRICES)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Raw Material") },
+        title = { Text(if (existing == null) "New Raw Material" else "Edit Raw Material") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Material Name") }, singleLine = true)
-                OutlinedTextField(value = code, onValueChange = { code = it }, label = { Text("Material Code") }, singleLine = true)
-                OutlinedTextField(value = cat, onValueChange = { cat = it }, label = { Text("Category") }, singleLine = true)
-                OutlinedTextField(value = unit, onValueChange = { unit = it }, label = { Text("Unit (kg, meter, pcs)") }, singleLine = true)
-                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Purchase Price (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(value = qty, onValueChange = { qty = it }, label = { Text("Initial Available Qty") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(value = minStock, onValueChange = { minStock = it }, label = { Text("Minimum Stock Alert") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Material Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("raw_material_name_input")
+                )
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it },
+                    label = { Text("Material Code") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("raw_material_code_input")
+                )
+                OutlinedTextField(
+                    value = cat,
+                    onValueChange = { cat = it },
+                    label = { Text("Category") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = unit,
+                    onValueChange = { unit = it },
+                    label = { Text("Unit (kg, meter, pcs)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (warehouses.isNotEmpty()) {
+                    ExposedDropdownMenuBox(expanded = whExpanded, onExpandedChange = { whExpanded = !whExpanded }) {
+                        OutlinedTextField(
+                            value = selectedWh?.name ?: "Main Warehouse",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Warehouse") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(whExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(expanded = whExpanded, onDismissRequest = { whExpanded = false }) {
+                            warehouses.forEach { w ->
+                                DropdownMenuItem(text = { Text(w.name) }, onClick = { selectedWh = w; whExpanded = false })
+                            }
+                        }
+                    }
+                }
+                if (canSeePrice) {
+                    OutlinedTextField(
+                        value = price,
+                        onValueChange = { price = it },
+                        label = { Text("Purchase Price (৳)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth().testTag("raw_material_price_input")
+                    )
+                }
+                OutlinedTextField(
+                    value = qty,
+                    onValueChange = { qty = it },
+                    label = { Text(if (existing == null) "Initial Available Qty" else "Available Qty") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth().testTag("raw_material_qty_input")
+                )
+                OutlinedTextField(
+                    value = minStock,
+                    onValueChange = { minStock = it },
+                    label = { Text("Minimum Stock Alert") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
-            Button(onClick = {
-                onSave(name, code, cat, unit, price.toDoubleOrNull() ?: 0.0, whId, qty.toDoubleOrNull() ?: 0.0, minStock.toDoubleOrNull() ?: 10.0)
-            }) { Text("Save") }
+            Button(
+                onClick = {
+                    onSave(
+                        existing?.id,
+                        name,
+                        code,
+                        cat,
+                        unit,
+                        price.toDoubleOrNull() ?: (existing?.purchasePrice ?: 0.0),
+                        selectedWh?.id ?: existing?.warehouseId ?: "wh_main",
+                        qty.toDoubleOrNull() ?: (existing?.availableQuantity ?: 0.0),
+                        minStock.toDoubleOrNull() ?: (existing?.minimumStock ?: 10.0)
+                    )
+                },
+                modifier = Modifier.testTag("save_raw_material_button")
+            ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )

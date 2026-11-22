@@ -362,11 +362,11 @@ class ErpViewModel(
         withSession({ opsRepo.deleteBomItem(it, bomId) }, "BOM item removed")
 
     fun saveRawMaterial(
-        name: String, code: String, category: String, unit: String,
+        existingId: String?, name: String, code: String, category: String, unit: String,
         price: Double, warehouseId: String, initialQty: Double, minStock: Double
     ) = withSession({
-        opsRepo.saveRawMaterial(it, name, code, category, unit, price, warehouseId, initialQty, minStock)
-    }, "Raw material saved")
+        opsRepo.saveRawMaterial(it, name, code, category, unit, price, warehouseId, initialQty, minStock, existingId)
+    }, if (existingId == null) "Raw material saved" else "Raw material updated")
 
     fun createWarehouse(name: String, location: String) =
         withSession({ opsRepo.createWarehouse(it, name, location) }, "Warehouse created")
