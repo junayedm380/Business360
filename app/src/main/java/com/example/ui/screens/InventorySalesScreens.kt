@@ -38,6 +38,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -79,9 +80,21 @@ fun InventoryScreen(
     onCreateWarehouse: (String, String) -> Unit,
     onTransferStock: (String, String, String, Double, String) -> Unit,
     onAdjustStock: (String, String, Double, String) -> Unit,
-    onExportStock: (ReportType) -> Unit
+    onExportStock: (ReportType) -> Unit,
+    initialSubTab: String? = null,
+    onClearInitialSubTab: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    LaunchedEffect(initialSubTab) {
+        if (!initialSubTab.isNullOrBlank()) {
+            selectedTab = when (initialSubTab) {
+                "MOVEMENTS" -> 1
+                "WAREHOUSES" -> 2
+                else -> 0
+            }
+            onClearInitialSubTab()
+        }
+    }
     var showWhDialog by remember { mutableStateOf(false) }
     var showTransferDialog by remember { mutableStateOf(false) }
     var showAdjustDialog by remember { mutableStateOf(false) }
@@ -224,7 +237,9 @@ fun SalesAndCustomersScreen(
     onCreateSale: (String, String, String, List<SaleItemRequest>, Double, Double, Double, String, Boolean, String) -> Unit,
     onConfirmDelivery: (String, Double) -> Unit,
     onProcessReturn: (String, String, Double, String, String) -> Unit,
-    onOpenCustomerLedger: (String) -> Unit
+    onOpenCustomerLedger: (String) -> Unit,
+    initialSubTab: String? = null,
+    onClearInitialSubTab: () -> Unit = {}
 ) {
     val tabs = buildList {
         if (session.has(AppPermission.CREATE_SALES) || session.isFullAdmin) add("ORDERS")
@@ -232,6 +247,13 @@ fun SalesAndCustomersScreen(
         if (session.has(AppPermission.MANAGE_RETURNS) || session.isFullAdmin) add("RETURNS")
     }
     var selectedTab by remember { mutableIntStateOf(0) }
+    LaunchedEffect(initialSubTab, tabs) {
+        if (!initialSubTab.isNullOrBlank()) {
+            val idx = tabs.indexOf(initialSubTab)
+            if (idx >= 0) selectedTab = idx
+            onClearInitialSubTab()
+        }
+    }
     val activeTab = tabs.getOrElse(selectedTab) { tabs.firstOrNull() ?: "ORDERS" }
     var search by remember { mutableStateOf("") }
     var showNewSaleDialog by remember { mutableStateOf<String?>(null) } // "WHOLESALE" or "RETAIL"

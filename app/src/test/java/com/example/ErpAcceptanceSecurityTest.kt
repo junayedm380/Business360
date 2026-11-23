@@ -10,8 +10,11 @@ import com.example.data.repository.FinanceRepository
 import com.example.data.repository.OperationsRepository
 import com.example.data.repository.ReportType
 import com.example.data.repository.SaleItemRequest
+import com.example.domain.AppLanguage
 import com.example.domain.AppPermission
+import com.example.domain.Translations
 import com.example.domain.UserRole
+import com.example.ui.components.buildGlobalSearchResults
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -365,5 +368,130 @@ class ErpAcceptanceSecurityTest {
         // Verify audit logs captured DELETE_USER actions
         val logs = authRepo.observeAuditLogs(superAdmin).first()
         assertEquals(4, logs.count { it.action == "DELETE_USER" })
+    }
+
+    @Test
+    fun `global search returns accurate deep links and enforces strict role filtering`() = runTest {
+        val superAdmin = authRepo.claimInitialSuperAdmin("Business360", "Owner", "owner@b360.bd", "secret123").getOrThrow()
+        authRepo.createUser(superAdmin, "Floor Manager", "mgr@b360.bd", "secret123", UserRole.MODERATOR_MANAGER).getOrThrow()
+        val mod = authRepo.login("mgr@b360.bd", "secret123").getOrThrow()
+        authRepo.createUser(superAdmin, "Prod Staff", "emp@b360.bd", "secret123", UserRole.EMPLOYEE).getOrThrow()
+        val emp = authRepo.login("emp@b360.bd", "secret123").getOrThrow()
+
+        val prod = opsRepo.saveProduct(superAdmin, "Silk Panjabi", "Apparel", "Eid", "pcs").getOrThrow()
+        val model = opsRepo.saveProductModel(superAdmin, null, prod.id, "Silk Royal", "SR-01", "", 500.0, 950.0, 1400.0, 5.0).getOrThrow()
+        val raw = opsRepo.saveRawMaterial(superAdmin, "Raw Silk Fabric", "RM-SILK", "Textile", "yd", 300.0, "wh_main", 40.0, 5.0).getOrThrow()
+        val batch = opsRepo.createProductionBatch(superAdmin, model.id, "wh_main", 20.0, 18.0, 1.0, 0.0, 200.0, 50.0, 25.0, 10.0, "Silk run").getOrThrow()
+        val cust = opsRepo.createCustomer(superAdmin, "Noor Fashion", "Noor House", "01799999999", "Dhaka", "WHOLESALE", 0.0, 10000.0).getOrThrow()
+        val cashAccounts = finRepo.observeCashAccounts(superAdmin).first()
+        val products = opsRepo.observeProducts().first()
+        val modelsAdmin = opsRepo.observeModelsSanitized(superAdmin).first()
+        val rawAdmin = opsRepo.observeRawMaterialsSanitized(superAdmin).first()
+        val batchesAdmin = opsRepo.observeProductionBatchesSanitized(superAdmin).first()
+        val customersAdmin = opsRepo.observeCustomersSanitized(superAdmin).first()
+
+        // Admin finds raw material -> deep links to production:RAW, cash -> finance:Cash & Bank, Bengali query works
+        val adminSilk = buildGlobalSearchResults(
+            query = "silk",
+            session = superAdmin,
+            strings = Translations.english,
+            language = AppLanguage.EN,
+            products = products,
+            models = modelsAdmin,
+            rawMaterials = rawAdmin,
+            batches = batchesAdmin,
+            warehouses = emptyList(),
+            customers = customersAdmin,
+            sales = emptyList(),
+            suppliers = emptyList(),
+            purchases = emptyList(),
+            expenses = emptyList(),
+            cashAccounts = cashAccounts,
+            hrEmployees = emptyList(),
+            hrLeaveRequests = emptyList(),
+            hrPayrollRuns = emptyList(),
+            users = emptyList(),
+            tasks = emptyList()
+        )
+        assertTrue(adminSilk.any { it.targetRoute == "production:CATALOG" && it.title.contains("Silk") })
+        assertTrue(adminSilk.any { it.targetRoute == "production:RAW" && it.title.contains("RM-SILK") })
+
+        val adminBengaliHr = buildGlobalSearchResults(
+            query = "হাজিরা",
+            session = superAdmin,
+            strings = Translations.bengali,
+            language = AppLanguage.BN,
+            products = products,
+            models = modelsAdmin,
+            rawMaterials = rawAdmin,
+            batches = batchesAdmin,
+            warehouses = emptyList(),
+            customers = customersAdmin,
+            sales = emptyList(),
+            suppliers = emptyList(),
+            purchases = emptyList(),
+            expenses = emptyList(),
+            cashAccounts = cashAccounts,
+            hrEmployees = emptyList(),
+            hrLeaveRequests = emptyList(),
+            hrPayrollRuns = emptyList(),
+            users = emptyList(),
+            tasks = emptyList()
+        )
+        assertTrue(adminBengaliHr.any { it.targetRoute == "hr:attendance" })
+
+        // Employee searching "silk" or "cash" NEVER sees raw materials, cash accounts, or customer dues
+        val empResults = buildGlobalSearchResults(
+            query = "silk",
+            session = emp,
+            strings = Translations.english,
+            language = AppLanguage.EN,
+            products = emptyList(),
+            models = emptyList(),
+            rawMaterials = rawAdmin,
+            batches = opsRepo.observeProductionBatchesSanitized(emp).first(),
+            warehouses = emptyList(),
+            customers = customersAdmin,
+            sales = emptyList(),
+            suppliers = emptyList(),
+            purchases = emptyList(),
+            expenses = emptyList(),
+            cashAccounts = cashAccounts,
+            hrEmployees = emptyList(),
+            hrLeaveRequests = emptyList(),
+            hrPayrollRuns = emptyList(),
+            users = emptyList(),
+            tasks = emptyList()
+        )
+        assertTrue(empResults.none { it.targetRoute.startsWith("production:RAW") })
+        assertTrue(empResults.none { it.targetRoute.startsWith("finance:") })
+
+        // Moderator searching "cash" or "payroll" receives zero financial/payroll hits
+        val modCash = buildGlobalSearchResults(
+            query = "cash",
+            session = mod,
+            strings = Translations.english,
+            language = AppLanguage.EN,
+            products = products,
+            models = opsRepo.observeModelsSanitized(mod).first(),
+            rawMaterials = opsRepo.observeRawMaterialsSanitized(mod).first(),
+            batches = opsRepo.observeProductionBatchesSanitized(mod).first(),
+            warehouses = emptyList(),
+            customers = opsRepo.observeCustomersSanitized(mod).first(),
+            sales = emptyList(),
+            suppliers = emptyList(),
+            purchases = emptyList(),
+            expenses = emptyList(),
+            cashAccounts = cashAccounts,
+            hrEmployees = emptyList(),
+            hrLeaveRequests = emptyList(),
+            hrPayrollRuns = emptyList(),
+            users = emptyList(),
+            tasks = emptyList()
+        )
+        assertTrue(modCash.isEmpty())
+        assertNotNull(batch)
+        assertNotNull(cust)
+        assertNotNull(raw)
     }
 }

@@ -47,6 +47,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -117,7 +118,9 @@ fun FinanceAndOpsScreen(
     onReviewExpense: (String, Boolean) -> Unit,
     onCashTx: (String, String?, Double, Boolean, String) -> Unit,
     onExecuteDailyClosing: (String) -> Unit,
-    onExportReport: (ReportType) -> Unit
+    onExportReport: (ReportType) -> Unit,
+    initialSubTab: String? = null,
+    onClearInitialSubTab: () -> Unit = {}
 ) {
     // Build only tabs permitted for the logged-in user's role
     val tabs = buildList {
@@ -152,6 +155,13 @@ fun FinanceAndOpsScreen(
     }
 
     var selectedIdx by remember { mutableIntStateOf(0) }
+    LaunchedEffect(initialSubTab, tabs) {
+        if (!initialSubTab.isNullOrBlank()) {
+            val idx = tabs.indexOf(initialSubTab)
+            if (idx >= 0) selectedIdx = idx
+            onClearInitialSubTab()
+        }
+    }
     val activeTab = tabs.getOrElse(selectedIdx) { tabs.first() }
 
     var showPaySubmitDialog by remember { mutableStateOf(false) }

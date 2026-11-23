@@ -41,6 +41,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,7 +88,9 @@ fun CatalogProductionScreen(
     onSaveRawMaterial: (String?, String, String, String, String, Double, String, Double, Double) -> Unit,
     onCreateBatch: (String, String, Double, Double, Double, Double, Double, Double, Double, Double, String) -> Unit,
     onEditBatch: (String, String, String, Double, Double, Double, Double, Double, Double, Double, Double, String) -> Unit,
-    onAdvanceBatch: (String, String) -> Unit
+    onAdvanceBatch: (String, String) -> Unit,
+    initialSubTab: String? = null,
+    onClearInitialSubTab: () -> Unit = {}
 ) {
     val tabs = buildList {
         if (session.has(AppPermission.VIEW_PRODUCTION)) add("BATCHES")
@@ -95,6 +98,13 @@ fun CatalogProductionScreen(
         if (session.has(AppPermission.VIEW_RAW_MATERIALS)) add("RAW")
     }
     var selectedTab by remember { mutableIntStateOf(0) }
+    LaunchedEffect(initialSubTab, tabs) {
+        if (!initialSubTab.isNullOrBlank()) {
+            val idx = tabs.indexOf(initialSubTab)
+            if (idx >= 0) selectedTab = idx
+            onClearInitialSubTab()
+        }
+    }
     val activeTab = tabs.getOrElse(selectedTab) { tabs.firstOrNull() ?: "BATCHES" }
     var showNewProductDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<ProductEntity?>(null) }

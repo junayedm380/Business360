@@ -39,6 +39,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,7 +88,9 @@ fun GovernanceAndSystemScreen(
     onDeleteUser: (String) -> Unit,
     onCreateTask: (String, String, String) -> Unit,
     onMarkNotificationRead: (String) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    initialSubTab: String? = null,
+    onClearInitialSubTab: () -> Unit = {}
 ) {
     val tabs = buildList {
         if (session.isFullAdmin) {
@@ -100,6 +103,21 @@ fun GovernanceAndSystemScreen(
     }
 
     var selectedIdx by remember { mutableIntStateOf(0) }
+    LaunchedEffect(initialSubTab, tabs) {
+        if (!initialSubTab.isNullOrBlank()) {
+            val targetTitle = when (initialSubTab) {
+                "NOTIFICATIONS" -> strings.notifications
+                "TASKS" -> "Assign Tasks"
+                "USERS" -> strings.userManagement
+                "AUDIT" -> strings.auditLogs
+                "SETTINGS" -> strings.settings
+                else -> initialSubTab
+            }
+            val idx = tabs.indexOf(targetTitle)
+            if (idx >= 0) selectedIdx = idx
+            onClearInitialSubTab()
+        }
+    }
     val activeTab = tabs.getOrElse(selectedIdx) { tabs.first() }
     var showCreateUserDialog by remember { mutableStateOf(false) }
     var editingUser by remember { mutableStateOf<UserEntity?>(null) }

@@ -10,21 +10,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AdminPanelSettings
@@ -32,30 +28,17 @@ import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Factory
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,14 +48,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -92,8 +69,11 @@ import com.example.data.repository.OperationsRepository
 import com.example.domain.AppLanguage
 import com.example.domain.AppPermission
 import com.example.domain.SessionUser
-import com.example.domain.UserRole
-import com.example.ui.components.RoleBadge
+import com.example.ui.components.Business360BottomActionBar
+import com.example.ui.components.Business360BrandTopBar
+import com.example.ui.components.ErpNavDestination
+import com.example.ui.components.GlobalSearchResultsOverlay
+import com.example.ui.components.buildGlobalSearchResults
 import com.example.ui.screens.CatalogProductionScreen
 import com.example.ui.screens.FinanceAndOpsScreen
 import com.example.ui.screens.GovernanceAndSystemScreen
@@ -145,12 +125,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
-private data class NavDestination(
-    val route: String,
-    val label: String,
-    val icon: ImageVector
-)
 
 @Composable
 fun CraftErpApp(viewModel: ErpViewModel, hrViewModel: HrViewModel) {
@@ -311,15 +285,15 @@ private fun AuthenticatedErpShell(
 
     val destinations = remember(session, strings, language) {
         buildList {
-            add(NavDestination("dashboard", strings.navDashboard, Icons.Filled.Dashboard))
+            add(ErpNavDestination("dashboard", strings.navDashboard, Icons.Filled.Dashboard))
             if (session.has(AppPermission.VIEW_PRODUCTION) || session.has(AppPermission.VIEW_PRODUCTS)) {
-                add(NavDestination("production", strings.navProduction, Icons.Filled.Factory))
+                add(ErpNavDestination("production", strings.navProduction, Icons.Filled.Factory))
             }
             if (session.has(AppPermission.VIEW_INVENTORY)) {
-                add(NavDestination("inventory", strings.navInventory, Icons.Filled.Inventory2))
+                add(ErpNavDestination("inventory", strings.navInventory, Icons.Filled.Inventory2))
             }
             if (session.has(AppPermission.CREATE_SALES)) {
-                add(NavDestination("sales", strings.navSales, Icons.Filled.PointOfSale))
+                add(ErpNavDestination("sales", strings.navSales, Icons.Filled.PointOfSale))
             }
             if (session.has(AppPermission.MANAGE_PURCHASES) || session.canViewFinancials) {
                 val finLabel = if (!session.canViewFinancials && session.has(AppPermission.MANAGE_PURCHASES)) {
@@ -327,31 +301,106 @@ private fun AuthenticatedErpShell(
                 } else {
                     strings.navFinance
                 }
-                add(NavDestination("finance", finLabel, Icons.Filled.AccountBalance))
+                add(ErpNavDestination("finance", finLabel, Icons.Filled.AccountBalance))
             }
             if (session.hasAnyHrAccess) {
-                add(NavDestination("hr", strings.navHr, Icons.Filled.Badge))
+                add(ErpNavDestination("hr", strings.navHr, Icons.Filled.Badge))
             }
-            add(NavDestination("admin", strings.navAdmin, Icons.Filled.AdminPanelSettings))
+            add(ErpNavDestination("admin", strings.navAdmin, Icons.Filled.AdminPanelSettings))
         }
     }
 
     var currentRoute by rememberSaveable(session.id) { mutableStateOf("dashboard") }
+    var productionInitialSubTab by rememberSaveable(session.id) { mutableStateOf<String?>(null) }
+    var inventoryInitialSubTab by rememberSaveable(session.id) { mutableStateOf<String?>(null) }
+    var salesInitialSubTab by rememberSaveable(session.id) { mutableStateOf<String?>(null) }
+    var financeInitialSubTab by rememberSaveable(session.id) { mutableStateOf<String?>(null) }
     var hrInitialSubTab by rememberSaveable(session.id) { mutableStateOf<String?>(null) }
+    var adminInitialSubTab by rememberSaveable(session.id) { mutableStateOf<String?>(null) }
+
+    var searchQuery by rememberSaveable(session.id) { mutableStateOf("") }
+    var isSearchFocused by remember { mutableStateOf(false) }
+    val isSearchOverlayVisible = isSearchFocused || searchQuery.isNotBlank()
+    val focusManager = LocalFocusManager.current
+
     if (destinations.none { it.route == currentRoute }) {
         currentRoute = "dashboard"
     }
 
+    val closeSearch: () -> Unit = {
+        searchQuery = ""
+        isSearchFocused = false
+        focusManager.clearFocus()
+    }
+
     val navigateToTarget: (String) -> Unit = { target ->
-        if (target.startsWith("hr:")) {
-            hrInitialSubTab = target.removePrefix("hr:")
-            currentRoute = "hr"
-        } else {
-            currentRoute = target
+        closeSearch()
+        val parts = target.split(":", limit = 2)
+        val mainRoute = parts[0]
+        val subTab = parts.getOrNull(1)
+        when (mainRoute) {
+            "production" -> {
+                productionInitialSubTab = subTab
+                currentRoute = "production"
+            }
+            "inventory" -> {
+                inventoryInitialSubTab = subTab
+                currentRoute = "inventory"
+            }
+            "sales" -> {
+                salesInitialSubTab = subTab
+                currentRoute = "sales"
+            }
+            "finance" -> {
+                financeInitialSubTab = subTab
+                currentRoute = "finance"
+            }
+            "hr" -> {
+                hrInitialSubTab = subTab
+                currentRoute = "hr"
+            }
+            "admin" -> {
+                adminInitialSubTab = subTab
+                currentRoute = "admin"
+            }
+            else -> currentRoute = mainRoute
         }
     }
 
-    BackHandler(enabled = currentRoute != "dashboard") {
+    val searchResults = remember(
+        searchQuery, session, strings, language, products, models, rawMaterials, batches,
+        warehouses, customers, sales, suppliers, purchases, expenses, cashAccounts,
+        hrEmployees, hrLeaveRequests, hrPayrollRuns, users, tasks
+    ) {
+        buildGlobalSearchResults(
+            query = searchQuery,
+            session = session,
+            strings = strings,
+            language = language,
+            products = products,
+            models = models,
+            rawMaterials = rawMaterials,
+            batches = batches,
+            warehouses = warehouses,
+            customers = customers,
+            sales = sales,
+            suppliers = suppliers,
+            purchases = purchases,
+            expenses = expenses,
+            cashAccounts = cashAccounts,
+            hrEmployees = hrEmployees,
+            hrLeaveRequests = hrLeaveRequests,
+            hrPayrollRuns = hrPayrollRuns,
+            users = users,
+            tasks = tasks
+        )
+    }
+
+    BackHandler(enabled = isSearchOverlayVisible) {
+        closeSearch()
+    }
+
+    BackHandler(enabled = !isSearchOverlayVisible && currentRoute != "dashboard") {
         currentRoute = "dashboard"
     }
 
@@ -429,83 +478,53 @@ private fun AuthenticatedErpShell(
         )
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val useRail = maxWidth >= 680.dp
-
-        Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing,
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                color = Color(0xFF01184B),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.size(42.dp)
-                            ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.business360_logo),
-                                    contentDescription = businessTitle,
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(2.dp)
-                                )
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = if (businessTitle == "Business360") "Business360" else "$businessTitle • B360",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    maxLines = 1
-                                )
-                                RoleBadge(session.role)
-                            }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-                    actions = {
-                        if (session.isFullAdmin) {
-                            IconButton(onClick = { currentRoute = "admin" }, modifier = Modifier.testTag("btn_notifications")) {
-                                BadgedBox(badge = { if (unreadCount > 0) Badge { Text(unreadCount.toString()) } }) {
-                                    Icon(Icons.Filled.Notifications, contentDescription = strings.notifications)
-                                }
-                            }
-                        }
-                    }
+    Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            Business360BrandTopBar(
+                businessTitle = businessTitle,
+                session = session,
+                strings = strings,
+                destinations = destinations,
+                currentRoute = currentRoute,
+                unreadCount = unreadCount,
+                onOpenNotifications = {
+                    navigateToTarget("admin:NOTIFICATIONS")
+                }
+            )
+        },
+        bottomBar = {
+            Business360BottomActionBar(
+                session = session,
+                strings = strings,
+                language = language,
+                destinations = destinations,
+                currentRoute = currentRoute,
+                searchQuery = searchQuery,
+                onSearchQueryChange = { searchQuery = it },
+                onSearchFocusChange = { focused -> isSearchFocused = focused },
+                onGoHome = {
+                    closeSearch()
+                    currentRoute = "dashboard"
+                },
+                onNavigateTarget = navigateToTarget
+            )
+        }
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            if (isSearchOverlayVisible) {
+                GlobalSearchResultsOverlay(
+                    query = searchQuery,
+                    language = language,
+                    strings = strings,
+                    destinations = destinations,
+                    results = searchResults,
+                    onSelectResult = { res -> navigateToTarget(res.targetRoute) },
+                    onQuickJumpRoute = { route -> navigateToTarget(route) },
+                    onCloseSearch = closeSearch
                 )
-            },
-            bottomBar = {
-                if (!useRail) {
-                    NavigationBar {
-                        destinations.forEach { dest ->
-                            NavigationBarItem(
-                                selected = currentRoute == dest.route,
-                                onClick = { currentRoute = dest.route },
-                                icon = { Icon(dest.icon, contentDescription = dest.label) },
-                                label = { Text(dest.label, maxLines = 1) },
-                                modifier = Modifier.testTag("nav_${dest.route}")
-                            )
-                        }
-                    }
-                }
-            }
-        ) { innerPadding ->
-            Row(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                if (useRail) {
-                    NavigationRail {
-                        destinations.forEach { dest ->
-                            NavigationRailItem(
-                                selected = currentRoute == dest.route,
-                                onClick = { currentRoute = dest.route },
-                                icon = { Icon(dest.icon, contentDescription = dest.label) },
-                                label = { Text(dest.label) }
-                            )
-                        }
-                    }
-                }
-
+            } else {
                 when (currentRoute) {
                     "dashboard" -> RoleBasedDashboardScreen(
                         session = session,
@@ -533,7 +552,9 @@ private fun AuthenticatedErpShell(
                         onSaveRawMaterial = viewModel::saveRawMaterial,
                         onCreateBatch = viewModel::createProductionBatch,
                         onEditBatch = viewModel::editProductionBatch,
-                        onAdvanceBatch = viewModel::advanceProductionBatch
+                        onAdvanceBatch = viewModel::advanceProductionBatch,
+                        initialSubTab = productionInitialSubTab,
+                        onClearInitialSubTab = { productionInitialSubTab = null }
                     )
                     "inventory" -> InventoryScreen(
                         session = session,
@@ -545,7 +566,9 @@ private fun AuthenticatedErpShell(
                         onCreateWarehouse = viewModel::createWarehouse,
                         onTransferStock = viewModel::transferStock,
                         onAdjustStock = viewModel::adjustStock,
-                        onExportStock = viewModel::exportReport
+                        onExportStock = viewModel::exportReport,
+                        initialSubTab = inventoryInitialSubTab,
+                        onClearInitialSubTab = { inventoryInitialSubTab = null }
                     )
                     "sales" -> SalesAndCustomersScreen(
                         session = session,
@@ -562,9 +585,12 @@ private fun AuthenticatedErpShell(
                         onOpenCustomerLedger = { custId ->
                             if (session.has(AppPermission.VIEW_CUSTOMER_LEDGER)) {
                                 viewModel.selectCustomerForLedger(custId)
+                                financeInitialSubTab = "Ledgers"
                                 currentRoute = "finance"
                             }
-                        }
+                        },
+                        initialSubTab = salesInitialSubTab,
+                        onClearInitialSubTab = { salesInitialSubTab = null }
                     )
                     "finance" -> FinanceAndOpsScreen(
                         session = session,
@@ -591,7 +617,9 @@ private fun AuthenticatedErpShell(
                         onReviewExpense = viewModel::reviewExpense,
                         onCashTx = viewModel::cashInOutOrTransfer,
                         onExecuteDailyClosing = viewModel::executeDailyClosing,
-                        onExportReport = viewModel::exportReport
+                        onExportReport = viewModel::exportReport,
+                        initialSubTab = financeInitialSubTab,
+                        onClearInitialSubTab = { financeInitialSubTab = null }
                     )
                     "hr" -> HrModuleScreen(
                         session = session,
@@ -653,7 +681,9 @@ private fun AuthenticatedErpShell(
                         onDeleteUser = viewModel::deleteUser,
                         onCreateTask = viewModel::createTask,
                         onMarkNotificationRead = viewModel::markNotificationRead,
-                        onLogout = viewModel::logout
+                        onLogout = viewModel::logout,
+                        initialSubTab = adminInitialSubTab,
+                        onClearInitialSubTab = { adminInitialSubTab = null }
                     )
                 }
             }
