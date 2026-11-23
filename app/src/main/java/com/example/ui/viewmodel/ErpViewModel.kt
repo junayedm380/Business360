@@ -449,6 +449,9 @@ class ErpViewModel(
     fun updateUserAccess(targetId: String, role: UserRole, perms: Set<AppPermission>, active: Boolean) =
         withSession({ authRepo.updateUserAccess(it, targetId, role, perms, active) }, "User permissions updated")
 
+    fun deleteUser(targetId: String) =
+        withSession({ authRepo.deleteUser(it, targetId) }, "User account removed")
+
     fun updateSettings(newSettings: AppSettingEntity) =
         withSession({ authRepo.updateSettings(it, newSettings) }, "Settings saved")
 

@@ -78,6 +78,8 @@ import com.example.domain.Formatters
 import com.example.domain.SessionUser
 import com.example.domain.UserRole
 import com.example.ui.components.BarChartPoint
+import com.example.ui.components.DonutBreakdownCard
+import com.example.ui.components.DonutSegment
 import com.example.ui.components.EmptyStateNotice
 import com.example.ui.components.KpiTile
 import com.example.ui.components.RestrictedBanner
@@ -275,6 +277,23 @@ fun RoleBasedDashboardScreen(
                     }
                 }
             }
+
+            item {
+                val cashCollected = fin.totalPaymentsReceived.coerceAtLeast(0.0)
+                val dues = fin.totalCustomerDue.coerceAtLeast(0.0)
+                val expensesVal = fin.totalExpenses.coerceAtLeast(0.0)
+                DonutBreakdownCard(
+                    title = "Cash Flow & Margin Composition",
+                    centerTitle = strings.totalSales,
+                    centerValue = Formatters.formatTaka(fin.totalSalesAmount),
+                    accentColor = EmeraldSecondary,
+                    segments = listOf(
+                        DonutSegment(strings.paymentsReceived, cashCollected, SuccessGreen),
+                        DonutSegment(strings.customerDue, dues, AmberTertiary),
+                        DonutSegment(strings.totalExpenses, expensesVal, RoseAccent)
+                    )
+                )
+            }
         }
 
         // --- 2. MODERATOR / MANAGER DASHBOARD (NO PROFIT OR COSTING) ---
@@ -311,6 +330,20 @@ fun RoleBasedDashboardScreen(
                             )
                         )
                     }
+                }
+                item {
+                    val totalOut = (ops.totalGoodQty + ops.totalRejectedQty).coerceAtLeast(0.0)
+                    val yieldPct = if (totalOut > 0) ((ops.totalGoodQty / totalOut) * 100.0).toInt() else 100
+                    DonutBreakdownCard(
+                        title = "Production Quality Yield",
+                        centerTitle = "Quality",
+                        centerValue = "$yieldPct%",
+                        accentColor = SuccessGreen,
+                        segments = listOf(
+                            DonutSegment(strings.goodProducts, ops.totalGoodQty, SuccessGreen),
+                            DonutSegment(strings.rejectedProducts, ops.totalRejectedQty, RoseAccent)
+                        )
+                    )
                 }
             }
         }
@@ -500,12 +533,12 @@ private fun ExecutiveHeroBanner(
                 )
         ) {
             Image(
-                painter = painterResource(id = R.drawable.erp_hero_banner_1795274162661),
+                painter = painterResource(id = R.drawable.img_dashboard_hero_1795378902163),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .matchParentSize()
-                    .alpha(0.18f)
+                    .alpha(0.32f)
             )
 
             Column(
@@ -518,11 +551,26 @@ private fun ExecutiveHeroBanner(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "B360 • Business360",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = HeroTextLight
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = Color(0xFF01184B),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.business360_logo),
+                                contentDescription = "Business360 Emblem",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize().padding(2.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "B360 • Business360",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = HeroTextLight
+                        )
+                    }
                     Text(
                         text = "Manage Everything. Grow Everywhere.",
                         style = MaterialTheme.typography.labelSmall,

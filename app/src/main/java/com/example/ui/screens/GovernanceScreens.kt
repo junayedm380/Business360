@@ -16,9 +16,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,6 +65,7 @@ import com.example.ui.components.EmptyStateNotice
 import com.example.ui.components.RoleBadge
 import com.example.ui.components.SectionCard
 import com.example.ui.components.StatusChip
+import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.ThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,6 +84,7 @@ fun GovernanceAndSystemScreen(
     onUpdateSettings: (AppSettingEntity) -> Unit,
     onCreateUser: (String, String, String, UserRole, Set<AppPermission>?) -> Unit,
     onUpdateUserAccess: (String, UserRole, Set<AppPermission>, Boolean) -> Unit,
+    onDeleteUser: (String) -> Unit,
     onCreateTask: (String, String, String) -> Unit,
     onMarkNotificationRead: (String) -> Unit,
     onLogout: () -> Unit
@@ -99,6 +103,7 @@ fun GovernanceAndSystemScreen(
     val activeTab = tabs.getOrElse(selectedIdx) { tabs.first() }
     var showCreateUserDialog by remember { mutableStateOf(false) }
     var editingUser by remember { mutableStateOf<UserEntity?>(null) }
+    var deletingUser by remember { mutableStateOf<UserEntity?>(null) }
     var showTaskDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -161,9 +166,20 @@ fun GovernanceAndSystemScreen(
                                         StatusChip(if (u.active) "ACTIVE" else "INACTIVE")
                                     }
                                 }
-                                if (u.id != session.id && (session.isFullAdmin || uRole.rank < session.role.rank)) {
-                                    IconButton(onClick = { editingUser = u }) {
-                                        Icon(Icons.Filled.Edit, contentDescription = "Edit permissions")
+                                if (u.id != session.id && (session.isSuperAdmin || (uRole != UserRole.SUPER_ADMIN && uRole.rank < session.role.rank))) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        IconButton(
+                                            onClick = { editingUser = u },
+                                            modifier = Modifier.testTag("btn_edit_user_${u.id}")
+                                        ) {
+                                            Icon(Icons.Filled.Edit, contentDescription = "Edit permissions")
+                                        }
+                                        IconButton(
+                                            onClick = { deletingUser = u },
+                                            modifier = Modifier.testTag("btn_delete_user_${u.id}")
+                                        ) {
+                                            Icon(Icons.Filled.Delete, contentDescription = "Remove user", tint = ErrorRed)
+                                        }
                                     }
                                 }
                             }
@@ -252,6 +268,33 @@ fun GovernanceAndSystemScreen(
         }
     }
 
+    deletingUser?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deletingUser = null },
+            title = { Text("Remove User Account?") },
+            text = {
+                Text("Are you sure you want to permanently remove ${target.fullName} (${target.email} • ${target.role})? They will no longer be able to sign in.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteUser(target.id)
+                        deletingUser = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                    modifier = Modifier.testTag("confirm_delete_user_btn")
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingUser = null }) {
+                    Text(strings.cancel)
+                }
+            }
+        )
+    }
+
     if (showTaskDialog && users.isNotEmpty()) {
         AssignTaskDialog(users = users, onDismiss = { showTaskDialog = false }) { title, desc, uid ->
             onCreateTask(title, desc, uid)
@@ -269,7 +312,9 @@ private fun CreateUserDialog(
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    val allowedRoles = UserRole.entries.filter { actor.isFullAdmin || it.rank < actor.role.rank }
+    val allowedRoles = UserRole.entries.filter {
+        actor.isSuperAdmin || (actor.isFullAdmin && it != UserRole.SUPER_ADMIN) || it.rank < actor.role.rank
+    }
     var selectedRole by remember { mutableStateOf(allowedRoles.lastOrNull() ?: UserRole.EMPLOYEE) }
 
     AlertDialog(
@@ -298,7 +343,9 @@ private fun EditUserPermissionsDialog(
     onDismiss: () -> Unit,
     onSave: (UserRole, Set<AppPermission>, Boolean) -> Unit
 ) {
-    val allowedRoles = UserRole.entries.filter { actor.isFullAdmin || it.rank < actor.role.rank }
+    val allowedRoles = UserRole.entries.filter {
+        actor.isSuperAdmin || (actor.isFullAdmin && it != UserRole.SUPER_ADMIN) || it.rank < actor.role.rank
+    }
     var role by remember { mutableStateOf(UserRole.fromString(target.role)) }
     var perms by remember { mutableStateOf(PermissionPolicy.parsePermissions(target.permissionsCsv, role)) }
     var active by remember { mutableStateOf(target.active) }

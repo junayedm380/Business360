@@ -28,6 +28,12 @@ interface ErpDao {
     @Update
     suspend fun updateUser(user: UserEntity)
 
+    @Query("DELETE FROM users WHERE id = :id")
+    suspend fun deleteUserById(id: String)
+
+    @Query("SELECT COUNT(*) FROM users WHERE role = 'SUPER_ADMIN' AND active = 1")
+    suspend fun countActiveSuperAdmins(): Int
+
     // --- Audit Logs & Settings & Notifications ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAuditLog(log: AuditLogEntity)

@@ -174,6 +174,43 @@ class HrOperationsRepository(private val db: ErpDatabase) {
         Result.failure(e)
     }
 
+    suspend fun deleteEmployee(actor: SessionUser, employeeId: String): Result<Unit> = try {
+        if (!actor.has(AppPermission.MANAGE_EMPLOYEES)) {
+            throw ErpSecurityException("Employee management permission required")
+        }
+        val existing = hrDao.getEmployeeById(employeeId) ?: throw IllegalArgumentException("Employee not found")
+        if (hrDao.countFinalizedPayrollsForEmployee(employeeId) > 0) {
+            throw IllegalStateException("Cannot delete employee with approved or paid payroll history. Set them Inactive instead.")
+        }
+        if (hrDao.countActiveAdvancesForEmployee(employeeId) > 0) {
+            throw IllegalStateException("Cannot delete employee with active unrecovered salary advances. Set them Inactive instead.")
+        }
+        db.withTransaction {
+            hrDao.deleteDraftPayrollsForEmployee(employeeId)
+            hrDao.deleteAttendanceForEmployee(employeeId)
+            hrDao.deleteLeavesForEmployee(employeeId)
+            hrDao.deleteAdvancesForEmployee(employeeId)
+            hrDao.deleteEmployeeById(employeeId)
+            dao.insertAuditLog(
+                AuditLogEntity(
+                    userId = actor.id,
+                    userName = actor.fullName,
+                    userRole = actor.role.name,
+                    action = "DELETE_EMPLOYEE",
+                    module = "HR_EMPLOYEES",
+                    recordId = employeeId,
+                    previousValue = "${existing.employeeCode} ${existing.fullName} (${existing.department})",
+                    newValue = "REMOVED"
+                )
+            )
+        }
+        Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     // --- Manual Attendance Management (Asia/Dhaka) ---
     fun observeAllAttendance(session: SessionUser): Flow<List<AttendanceRecordEntity>> {
         if (!session.canReadAttendance()) throw ErpSecurityException("Attendance access denied")

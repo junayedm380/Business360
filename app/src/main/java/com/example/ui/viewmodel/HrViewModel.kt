@@ -214,6 +214,9 @@ class HrViewModel(
     fun setEmployeeActive(employeeId: String, active: Boolean) =
         withHrSession({ hrOpsRepo.setEmployeeActive(it, employeeId, active) }, if (active) "Employee activated" else "Employee deactivated")
 
+    fun deleteEmployee(employeeId: String) =
+        withHrSession({ hrOpsRepo.deleteEmployee(it, employeeId) }, "Employee record removed")
+
     fun markOrUpdateAttendance(
         employeeId: String,
         dateKey: String,

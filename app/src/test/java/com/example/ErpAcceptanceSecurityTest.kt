@@ -321,4 +321,49 @@ class ErpAcceptanceSecurityTest {
                 .exceptionOrNull() is ErpSecurityException
         )
     }
+
+    @Test
+    fun `user removal supports deleting employee moderator and admin with hierarchy and last super admin protection`() = runTest {
+        val superAdmin = authRepo.claimInitialSuperAdmin("Business360", "Owner", "owner@b360.bd", "secret123").getOrThrow()
+        val adminEntity = authRepo.createUser(superAdmin, "Admin User", "admin@b360.bd", "secret123", UserRole.ADMIN).getOrThrow()
+        val admin = authRepo.login("admin@b360.bd", "secret123").getOrThrow()
+        val modEntity = authRepo.createUser(superAdmin, "Floor Manager", "mod@b360.bd", "secret123", UserRole.MODERATOR_MANAGER).getOrThrow()
+        val empEntity = authRepo.createUser(superAdmin, "Prod Staff", "emp@b360.bd", "secret123", UserRole.EMPLOYEE).getOrThrow()
+        val emp = authRepo.login("emp@b360.bd", "secret123").getOrThrow()
+
+        // Non-admin cannot delete any user
+        assertTrue(authRepo.deleteUser(emp, modEntity.id).exceptionOrNull() is ErpSecurityException)
+
+        // Regular Admin cannot delete or modify Super Admin
+        assertTrue(authRepo.deleteUser(admin, superAdmin.id).exceptionOrNull() is ErpSecurityException)
+        assertTrue(
+            authRepo.updateUserAccess(admin, superAdmin.id, UserRole.ADMIN, AppPermission.entries.toSet(), true)
+                .exceptionOrNull() is ErpSecurityException
+        )
+
+        // Users cannot delete themselves
+        assertTrue(authRepo.deleteUser(admin, admin.id).exceptionOrNull() is ErpSecurityException)
+
+        // Last active Super Admin cannot be removed
+        assertTrue(authRepo.deleteUser(superAdmin, superAdmin.id).exceptionOrNull() is ErpSecurityException)
+        val secondSuperAdmin = authRepo.createUser(superAdmin, "Co-Owner", "owner2@b360.bd", "secret123", UserRole.SUPER_ADMIN).getOrThrow()
+        val secondSaSession = authRepo.login("owner2@b360.bd", "secret123").getOrThrow()
+
+        // Admin can remove Employee and Moderator; Super Admin can remove Admin and extra Super Admin
+        authRepo.deleteUser(admin, empEntity.id).getOrThrow()
+        authRepo.deleteUser(admin, modEntity.id).getOrThrow()
+        authRepo.deleteUser(superAdmin, adminEntity.id).getOrThrow()
+        authRepo.deleteUser(superAdmin, secondSuperAdmin.id).getOrThrow()
+
+        // Cannot remove the only remaining Super Admin even if attempted via another admin context
+        assertEquals(1, db.erpDao().countActiveSuperAdmins())
+        assertTrue(authRepo.login("emp@b360.bd", "secret123").isFailure)
+        assertTrue(authRepo.login("mod@b360.bd", "secret123").isFailure)
+        assertTrue(authRepo.login("admin@b360.bd", "secret123").isFailure)
+        assertNotNull(secondSaSession)
+
+        // Verify audit logs captured DELETE_USER actions
+        val logs = authRepo.observeAuditLogs(superAdmin).first()
+        assertEquals(4, logs.count { it.action == "DELETE_USER" })
+    }
 }

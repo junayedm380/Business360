@@ -243,12 +243,12 @@ private fun AuthShell(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(190.dp)
+                        .height(210.dp)
                         .clip(MaterialTheme.shapes.large)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.erp_hero_banner_1795274162661),
-                        contentDescription = "Business360 Brand Banner",
+                        painter = painterResource(id = R.drawable.img_dashboard_hero_1795378902163),
+                        contentDescription = "Business360 Command Backdrop",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -257,24 +257,31 @@ private fun AuthShell(
                             .fillMaxSize()
                             .background(
                                 Brush.verticalGradient(
-                                    listOf(Color.Black.copy(alpha = 0.20f), Color(0xFF01143F).copy(alpha = 0.92f))
+                                    listOf(Color(0xFF011238).copy(alpha = 0.35f), Color(0xFF01143F).copy(alpha = 0.92f))
                                 )
                             )
-                            .padding(18.dp),
+                            .padding(16.dp),
                         contentAlignment = Alignment.BottomStart
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.business360_logo),
-                                contentDescription = "Business360 Logo",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(70.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                            )
+                            Surface(
+                                color = Color(0xFF01184B),
+                                shape = RoundedCornerShape(16.dp),
+                                shadowElevation = 6.dp,
+                                modifier = Modifier.size(104.dp)
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.business360_logo),
+                                    contentDescription = "Business360 Logo",
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(4.dp)
+                                )
+                            }
                             Spacer(Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Surface(
@@ -282,7 +289,7 @@ private fun AuthShell(
                                     shape = RoundedCornerShape(50)
                                 ) {
                                     Text(
-                                        text = "B360 • All-in-One Business Management System",
+                                        text = "B360 • All-in-One Business System",
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                                         color = Color.White,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)

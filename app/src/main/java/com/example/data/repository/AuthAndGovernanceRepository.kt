@@ -290,10 +290,18 @@ class AuthAndGovernanceRepository(private val db: ErpDatabase) {
         }
         val target = dao.getUserById(targetUserId) ?: throw IllegalArgumentException("User not found")
         val targetCurrentRole = UserRole.fromString(target.role)
+        if (!actor.isSuperAdmin && (targetCurrentRole == UserRole.SUPER_ADMIN || newRole == UserRole.SUPER_ADMIN)) {
+            throw ErpSecurityException("Only Super Admin can assign or modify a Super Admin account")
+        }
         if (!actor.isFullAdmin &&
             (targetCurrentRole.rank >= actor.role.rank || newRole.rank >= actor.role.rank)
         ) {
             throw ErpSecurityException("Cannot alter a user with equal or higher role authority")
+        }
+        if (targetCurrentRole == UserRole.SUPER_ADMIN && target.active && (!active || newRole != UserRole.SUPER_ADMIN)) {
+            if (dao.countActiveSuperAdmins() <= 1) {
+                throw IllegalStateException("Cannot deactivate or downgrade the last active Super Admin")
+            }
         }
         val serialized = PermissionPolicy.serializePermissions(newPermissions, newRole)
         val updated = target.copy(
@@ -314,6 +322,49 @@ class AuthAndGovernanceRepository(private val db: ErpDatabase) {
                     recordId = targetUserId,
                     previousValue = "${target.role} active=${target.active}",
                     newValue = "${updated.role} active=${updated.active}"
+                )
+            )
+        }
+        Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun deleteUser(
+        actor: SessionUser,
+        targetUserId: String
+    ): Result<Unit> = try {
+        if (!actor.has(AppPermission.MANAGE_USERS)) {
+            throw ErpSecurityException("Permission denied: MANAGE_USERS required")
+        }
+        if (actor.id == targetUserId) {
+            throw ErpSecurityException("Cannot remove your own currently signed-in account")
+        }
+        val target = dao.getUserById(targetUserId) ?: throw IllegalArgumentException("User account not found")
+        val targetCurrentRole = UserRole.fromString(target.role)
+        if (!actor.isSuperAdmin && targetCurrentRole == UserRole.SUPER_ADMIN) {
+            throw ErpSecurityException("Only Super Admin can remove a Super Admin account")
+        }
+        if (!actor.isFullAdmin && targetCurrentRole.rank >= actor.role.rank) {
+            throw ErpSecurityException("Cannot remove a user with equal or higher role authority")
+        }
+        if (targetCurrentRole == UserRole.SUPER_ADMIN && dao.countActiveSuperAdmins() <= 1) {
+            throw IllegalStateException("Cannot remove the last active Super Admin account")
+        }
+        db.withTransaction {
+            dao.deleteUserById(targetUserId)
+            dao.insertAuditLog(
+                AuditLogEntity(
+                    userId = actor.id,
+                    userName = actor.fullName,
+                    userRole = actor.role.name,
+                    action = "DELETE_USER",
+                    module = "SECURITY",
+                    recordId = targetUserId,
+                    previousValue = "${target.fullName} <${target.email}> (${target.role})",
+                    newValue = "REMOVED"
                 )
             )
         }

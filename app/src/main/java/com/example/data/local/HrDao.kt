@@ -24,6 +24,27 @@ interface HrDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertEmployee(employee: EmployeeEntity)
 
+    @Query("DELETE FROM employees WHERE id = :id")
+    suspend fun deleteEmployeeById(id: String)
+
+    @Query("DELETE FROM attendance_records WHERE employeeId = :employeeId")
+    suspend fun deleteAttendanceForEmployee(employeeId: String)
+
+    @Query("DELETE FROM leave_requests WHERE employeeId = :employeeId")
+    suspend fun deleteLeavesForEmployee(employeeId: String)
+
+    @Query("DELETE FROM employee_advances WHERE employeeId = :employeeId")
+    suspend fun deleteAdvancesForEmployee(employeeId: String)
+
+    @Query("DELETE FROM payroll_runs WHERE employeeId = :employeeId AND status = 'DRAFT'")
+    suspend fun deleteDraftPayrollsForEmployee(employeeId: String)
+
+    @Query("SELECT COUNT(*) FROM payroll_runs WHERE employeeId = :employeeId AND status IN ('APPROVED', 'PAID')")
+    suspend fun countFinalizedPayrollsForEmployee(employeeId: String): Int
+
+    @Query("SELECT COUNT(*) FROM employee_advances WHERE employeeId = :employeeId AND status = 'ACTIVE' AND remainingBalance > 0")
+    suspend fun countActiveAdvancesForEmployee(employeeId: String): Int
+
     // --- Attendance & Daily Closing ---
     @Query("SELECT * FROM attendance_records ORDER BY dateKey DESC, updatedAt DESC LIMIT 500")
     fun observeAllAttendance(): Flow<List<AttendanceRecordEntity>>

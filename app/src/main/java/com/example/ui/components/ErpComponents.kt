@@ -36,15 +36,19 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.domain.UserRole
 import com.example.ui.theme.CyanAccent
 import com.example.ui.theme.ErrorContainer
 import com.example.ui.theme.ErrorRed
+import com.example.ui.theme.HeroTextLight
 import com.example.ui.theme.IndigoAccent
 import com.example.ui.theme.JetBrainsMonoFamily
 import com.example.ui.theme.SuccessContainer
@@ -52,6 +56,7 @@ import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.VioletAccent
 import com.example.ui.theme.WarningAmber
 import com.example.ui.theme.WarningContainer
+import java.util.Locale
 
 @Composable
 fun KpiTile(
@@ -68,8 +73,8 @@ fun KpiTile(
         modifier = modifier.then(if (testTag.isNotBlank()) Modifier.testTag(testTag) else Modifier),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = surfaceColor),
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.24f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.28f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Box(
             modifier = Modifier
@@ -77,22 +82,21 @@ fun KpiTile(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            accentColor.copy(alpha = 0.14f),
-                            accentColor.copy(alpha = 0.04f),
+                            accentColor.copy(alpha = 0.16f),
+                            accentColor.copy(alpha = 0.05f),
                             surfaceColor
                         )
                     )
                 )
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // Crisp top color bar
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(3.dp)
+                        .height(3.5.dp)
                         .background(
                             Brush.horizontalGradient(
-                                colors = listOf(accentColor, accentColor.copy(alpha = 0.45f))
+                                colors = listOf(accentColor, accentColor.copy(alpha = 0.40f))
                             )
                         )
                 )
@@ -113,12 +117,16 @@ fun KpiTile(
                         Spacer(Modifier.width(6.dp))
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(36.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(accentColor.copy(alpha = 0.16f)),
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(accentColor, accentColor.copy(alpha = 0.78f))
+                                    )
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(icon, contentDescription = title, tint = accentColor, modifier = Modifier.size(19.dp))
+                            Icon(icon, contentDescription = title, tint = HeroTextLight, modifier = Modifier.size(19.dp))
                         }
                     }
                     Spacer(Modifier.height(10.dp))
@@ -312,6 +320,121 @@ fun EmptyStateNotice(message: String, modifier: Modifier = Modifier) {
 
 data class BarChartPoint(val label: String, val value: Double, val color: Color)
 
+data class DonutSegment(val label: String, val value: Double, val color: Color)
+
+@Composable
+fun DonutBreakdownCard(
+    title: String,
+    centerTitle: String,
+    centerValue: String,
+    segments: List<DonutSegment>,
+    modifier: Modifier = Modifier,
+    accentColor: Color = IndigoAccent
+) {
+    val total = segments.sumOf { it.value.coerceAtLeast(0.0) }
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+    SectionCard(title = title, modifier = modifier, accentColor = accentColor) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier.size(126.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Canvas(modifier = Modifier.size(116.dp)) {
+                    val strokePx = 18.dp.toPx()
+                    drawArc(
+                        color = trackColor,
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                    )
+                    if (total > 0.0) {
+                        var startAngle = -90f
+                        segments.filter { it.value > 0.0 }.forEach { seg ->
+                            val sweep = ((seg.value / total) * 360.0).toFloat()
+                            val gap = if (segments.count { it.value > 0.0 } > 1) 4f else 0f
+                            val drawSweep = (sweep - gap).coerceAtLeast(2f)
+                            drawArc(
+                                brush = Brush.sweepGradient(listOf(seg.color, seg.color.copy(alpha = 0.78f))),
+                                startAngle = startAngle,
+                                sweepAngle = drawSweep,
+                                useCenter = false,
+                                style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                            )
+                            startAngle += sweep
+                        }
+                    }
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = centerTitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = centerValue,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = JetBrainsMonoFamily,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                segments.forEach { seg ->
+                    val pct = if (total > 0.0) (seg.value.coerceAtLeast(0.0) / total) * 100.0 else 0.0
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(seg.color))
+                            Spacer(Modifier.width(7.dp))
+                            Text(
+                                text = seg.label,
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Text(
+                            text = String.format(Locale.US, "%.0f%%", pct),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMonoFamily,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = seg.color
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun compactNumberLabel(value: Double): String = when {
+    value >= 1_000_000.0 -> String.format(Locale.US, "%.1fM", value / 1_000_000.0)
+    value >= 1_000.0 -> String.format(Locale.US, "%.1fK", value / 1_000.0)
+    value % 1.0 == 0.0 -> value.toLong().toString()
+    else -> String.format(Locale.US, "%.1f", value)
+}
+
 @Composable
 fun SimpleBarChart(
     points: List<BarChartPoint>,
@@ -321,11 +444,29 @@ fun SimpleBarChart(
     val maxVal = (points.maxOfOrNull { it.value } ?: 1.0).coerceAtLeast(1.0)
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            points.forEach { pt ->
+                Text(
+                    text = compactNumberLabel(pt.value),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = JetBrainsMonoFamily,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = pt.color,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        Spacer(Modifier.height(2.dp))
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(152.dp)
-                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
             val dashEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
             listOf(0.25f, 0.5f, 0.75f).forEach { fraction ->
@@ -338,7 +479,6 @@ fun SimpleBarChart(
                     pathEffect = dashEffect
                 )
             }
-            // Baseline
             drawLine(
                 color = gridColor,
                 start = Offset(0f, size.height),
@@ -353,23 +493,28 @@ fun SimpleBarChart(
                 val barHeight = ((size.height - 10.dp.toPx()) * ratio).coerceAtLeast(6.dp.toPx())
                 val left = idx * barSlot + (barSlot - barWidth) / 2f
                 val top = size.height - barHeight
-                // Soft glow backing
                 drawRoundRect(
                     color = pt.color.copy(alpha = 0.10f),
                     topLeft = Offset(left - 2.dp.toPx(), 4.dp.toPx()),
                     size = Size(barWidth + 4.dp.toPx(), size.height - 4.dp.toPx()),
                     cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
                 )
-                // Gradient bar
                 drawRoundRect(
                     brush = Brush.verticalGradient(
-                        colors = listOf(pt.color, pt.color.copy(alpha = 0.68f)),
+                        colors = listOf(pt.color, pt.color.copy(alpha = 0.65f)),
                         startY = top,
                         endY = size.height
                     ),
                     topLeft = Offset(left, top),
                     size = Size(barWidth, barHeight),
                     cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
+                )
+                // Specular top cap highlight for 3D depth
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.28f),
+                    topLeft = Offset(left + 3.dp.toPx(), top + 2.dp.toPx()),
+                    size = Size((barWidth - 6.dp.toPx()).coerceAtLeast(2f), 3.dp.toPx()),
+                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
                 )
             }
         }

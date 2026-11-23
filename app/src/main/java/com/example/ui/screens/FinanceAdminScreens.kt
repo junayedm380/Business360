@@ -3,7 +3,10 @@ package com.example.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,6 +28,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,10 +54,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.data.local.CashAccountEntity
 import com.example.data.local.CustomerLedgerEntity
 import com.example.data.local.ExpenseEntity
@@ -74,6 +86,8 @@ import com.example.ui.components.RestrictedBanner
 import com.example.ui.components.SectionCard
 import com.example.ui.components.StatusChip
 import com.example.ui.theme.ErrorRed
+import com.example.ui.theme.HeroDeepStart
+import com.example.ui.theme.HeroTealMid
 import com.example.ui.theme.SuccessGreen
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -296,6 +310,12 @@ fun FinanceAndOpsScreen(
 
                 "Cash & Bank" -> {
                     item {
+                        FinanceBannerCard(
+                            title = strings.cashAndBank,
+                            subtitle = "Total Liquidity: ${Formatters.formatTaka(cashAccounts.sumOf { it.currentBalance })}"
+                        )
+                    }
+                    item {
                         if (session.has(AppPermission.MANAGE_CASH_BANK)) {
                             Button(onClick = { showCashTxDialog = true }, modifier = Modifier.fillMaxWidth()) {
                                 Text("Cash In / Out / Account Transfer")
@@ -345,6 +365,12 @@ fun FinanceAndOpsScreen(
 
                 "Accounting" -> {
                     if (accounting != null) {
+                        item {
+                            FinanceBannerCard(
+                                title = strings.accountingAndReports,
+                                subtitle = "Net Profit: ${Formatters.formatTaka(accounting.profitAndLoss.netProfit)}"
+                            )
+                        }
                         item {
                             val pl = accounting.profitAndLoss
                             SectionCard(
@@ -651,4 +677,47 @@ private fun CashAccountTxDialog(accounts: List<CashAccountEntity>, onDismiss: ()
         confirmButton = { Button(onClick = { onSubmit(fromAcct.id, if (mode == "TRANSFER") toAcct.id else null, amt.toDoubleOrNull() ?: 0.0, mode == "CASH_IN", notes) }) { Text("Confirm") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+@Composable
+private fun FinanceBannerCard(title: String, subtitle: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(104.dp)
+                .background(Brush.horizontalGradient(listOf(HeroDeepStart, HeroTealMid)))
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.img_finance_analytics_banner_1795378901702),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(0.32f)
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color.White.copy(alpha = 0.92f)
+                )
+            }
+        }
+    }
 }

@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,12 +28,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -59,13 +64,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.R
 import com.example.data.local.AttendanceDailyClosingEntity
 import com.example.data.local.AttendanceRecordEntity
 import com.example.data.local.AuditLogEntity
@@ -90,6 +100,9 @@ import com.example.ui.components.SectionCard
 import com.example.ui.components.StatusChip
 import com.example.ui.theme.CyanAccent
 import com.example.ui.theme.EmeraldSecondary
+import com.example.ui.theme.ErrorRed
+import com.example.ui.theme.HeroDeepStart
+import com.example.ui.theme.HeroTealMid
 import com.example.ui.theme.IndigoAccent
 import com.example.ui.theme.JetBrainsMonoFamily
 
@@ -129,6 +142,7 @@ fun HrModuleScreen(
     onShiftMonth: (Int) -> Unit,
     onSaveEmployee: (String?, String, String, String, String, String, String, Long, String, Boolean, Double, Double, Double, Double, Double, Double) -> Unit,
     onSetEmployeeActive: (String, Boolean) -> Unit,
+    onDeleteEmployee: (String) -> Unit,
     onMarkAttendance: (String, String, String, String, String, Double, String) -> Unit,
     onMarkAllPresent: (String) -> Unit,
     onCloseDailyAttendance: (String, String) -> Unit,
@@ -210,7 +224,8 @@ fun HrModuleScreen(
                 currencySymbol = currencySymbol,
                 employees = employees,
                 onSaveEmployee = onSaveEmployee,
-                onSetEmployeeActive = onSetEmployeeActive
+                onSetEmployeeActive = onSetEmployeeActive,
+                onDeleteEmployee = onDeleteEmployee
             )
             HrSubTab.ATTENDANCE -> AttendanceTab(
                 session = session,
@@ -284,13 +299,15 @@ private fun EmployeesTab(
     currencySymbol: String,
     employees: List<EmployeeSanitizedView>,
     onSaveEmployee: (String?, String, String, String, String, String, String, Long, String, Boolean, Double, Double, Double, Double, Double, Double) -> Unit,
-    onSetEmployeeActive: (String, Boolean) -> Unit
+    onSetEmployeeActive: (String, Boolean) -> Unit,
+    onDeleteEmployee: (String) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var filterStatus by remember { mutableStateOf("ACTIVE") } // ALL, ACTIVE, INACTIVE
     var showAddDialog by remember { mutableStateOf(false) }
     var editingEmployee by remember { mutableStateOf<EmployeeSanitizedView?>(null) }
     var viewingProfile by remember { mutableStateOf<EmployeeSanitizedView?>(null) }
+    var deletingEmployee by remember { mutableStateOf<EmployeeSanitizedView?>(null) }
 
     val filtered = remember(employees, searchQuery, filterStatus) {
         employees.filter { emp ->
@@ -314,6 +331,56 @@ private fun EmployeesTab(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            Card(
+                shape = MaterialTheme.shapes.large,
+                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(112.dp)
+                        .background(Brush.linearGradient(listOf(HeroDeepStart, HeroTealMid)))
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.img_hr_workforce_banner_1795378902848),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize().alpha(0.38f)
+                    )
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = strings.employeeManagement,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Surface(color = Color.White.copy(alpha = 0.16f), shape = MaterialTheme.shapes.small) {
+                                Text(
+                                    text = "Active: ${employees.count { it.active }}",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                            Surface(color = Color.White.copy(alpha = 0.16f), shape = MaterialTheme.shapes.small) {
+                                Text(
+                                    text = "Total Staff: ${employees.size}",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -388,6 +455,14 @@ private fun EmployeesTab(
                                 )
                             }
                         }
+                        if (session.has(AppPermission.MANAGE_EMPLOYEES)) {
+                            IconButton(
+                                onClick = { deletingEmployee = emp },
+                                modifier = Modifier.testTag("btn_delete_emp_${emp.id}")
+                            ) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Remove employee", tint = ErrorRed)
+                            }
+                        }
                     }
                 }
             }
@@ -433,6 +508,31 @@ private fun EmployeesTab(
             onEdit = {
                 viewingProfile = null
                 editingEmployee = emp
+            }
+        )
+    }
+
+    deletingEmployee?.let { emp ->
+        AlertDialog(
+            onDismissRequest = { deletingEmployee = null },
+            title = { Text("Remove Employee Record?") },
+            text = {
+                Text("Are you sure you want to remove ${emp.fullName} [${emp.employeeCode}]? Employees with finalized payroll or active advances cannot be removed and must be set Inactive instead.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteEmployee(emp.id)
+                        deletingEmployee = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                    modifier = Modifier.testTag("confirm_delete_emp_btn")
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingEmployee = null }) { Text(strings.cancel) }
             }
         )
     }

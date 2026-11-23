@@ -51,6 +51,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -65,7 +66,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -436,13 +439,20 @@ private fun AuthenticatedErpShell(
                 TopAppBar(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Image(
-                                painter = painterResource(id = R.drawable.business360_logo),
-                                contentDescription = businessTitle,
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                            )
+                            Surface(
+                                color = Color(0xFF01184B),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.size(42.dp)
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.business360_logo),
+                                    contentDescription = businessTitle,
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(2.dp)
+                                )
+                            }
                             Spacer(Modifier.width(10.dp))
                             Column {
                                 Text(
@@ -609,6 +619,7 @@ private fun AuthenticatedErpShell(
                         onShiftMonth = hrViewModel::shiftMonth,
                         onSaveEmployee = hrViewModel::saveEmployee,
                         onSetEmployeeActive = hrViewModel::setEmployeeActive,
+                        onDeleteEmployee = hrViewModel::deleteEmployee,
                         onMarkAttendance = hrViewModel::markOrUpdateAttendance,
                         onMarkAllPresent = hrViewModel::markAllPresent,
                         onCloseDailyAttendance = hrViewModel::closeDailyAttendance,
@@ -639,6 +650,7 @@ private fun AuthenticatedErpShell(
                         onUpdateSettings = viewModel::updateSettings,
                         onCreateUser = viewModel::createUser,
                         onUpdateUserAccess = viewModel::updateUserAccess,
+                        onDeleteUser = viewModel::deleteUser,
                         onCreateTask = viewModel::createTask,
                         onMarkNotificationRead = viewModel::markNotificationRead,
                         onLogout = viewModel::logout

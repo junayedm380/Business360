@@ -489,4 +489,50 @@ class HrPayrollIntegrationTest {
         assertEquals(36500.0, statements.profitAndLoss.operatingExpenses, 0.01)
         assertEquals(-36500.0, statements.profitAndLoss.netProfit, 0.01)
     }
+
+    @Test
+    fun `employee removal cleans draft records and protects employees with finalized payroll or active advances`() = runTest {
+        val superAdmin = authRepo.claimInitialSuperAdmin("Business360", "Owner", "owner@b360.bd", "secret123").getOrThrow()
+        authRepo.createUser(superAdmin, "Floor Manager", "mgr@b360.bd", "secret123", UserRole.MODERATOR_MANAGER).getOrThrow()
+        val mgr = authRepo.login("mgr@b360.bd", "secret123").getOrThrow()
+
+        // Seed cash for advance
+        finRepo.recordCashInOutOrTransfer(superAdmin, "acct_cash", null, 50000.0, isCashIn = true, "Capital").getOrThrow()
+
+        val removableEmp = hrOpsRepo.saveEmployee(
+            actor = superAdmin, employeeCode = "EMP-DEL-1", fullName = "Temporary Staff", photoUri = "",
+            phone = "01710000001", department = "Packing", designation = "Helper",
+            joiningDate = 1700000000000L, employmentStatus = "CONTRACT", active = true,
+            basicSalary = 12000.0, houseAllowance = 0.0, medicalAllowance = 0.0,
+            transportAllowance = 0.0, otherAllowance = 0.0, overtimeHourlyRate = 80.0
+        ).getOrThrow()
+
+        val protectedEmp = hrOpsRepo.saveEmployee(
+            actor = superAdmin, employeeCode = "EMP-KEEP-1", fullName = "Senior Staff", photoUri = "",
+            phone = "01710000002", department = "Stitching", designation = "Lead",
+            joiningDate = 1700000000000L, employmentStatus = "FULL_TIME", active = true,
+            basicSalary = 24000.0, houseAllowance = 0.0, medicalAllowance = 0.0,
+            transportAllowance = 0.0, otherAllowance = 0.0, overtimeHourlyRate = 150.0
+        ).getOrThrow()
+
+        // Create attendance & draft payroll for removableEmp
+        hrOpsRepo.markOrUpdateAttendance(superAdmin, removableEmp.id, "2026-06-01", "PRESENT", "09:00", "18:00", 0.0, "OK").getOrThrow()
+        hrPayrollRepo.generateMonthlyPayroll(superAdmin, "2026-06", 0.0, 0.0, "Draft").getOrThrow()
+
+        // Issue active advance to protectedEmp
+        hrPayrollRepo.issueEmployeeAdvance(superAdmin, protectedEmp.id, 2000.0, "acct_cash", "Medical", "2026-06-02").getOrThrow()
+
+        // Manager cannot delete any HR employee
+        assertTrue(hrOpsRepo.deleteEmployee(mgr, removableEmp.id).exceptionOrNull() is ErpSecurityException)
+
+        // Employee with active unrecovered advance cannot be deleted
+        assertTrue(hrOpsRepo.deleteEmployee(superAdmin, protectedEmp.id).isFailure)
+
+        // Employee with only attendance and DRAFT payroll CAN be deleted cleanly
+        hrOpsRepo.deleteEmployee(superAdmin, removableEmp.id).getOrThrow()
+        assertNull(db.hrDao().getEmployeeById(removableEmp.id))
+        assertTrue(hrOpsRepo.observeAttendanceForMonth(superAdmin, "2026-06").first().none { it.employeeId == removableEmp.id })
+        assertTrue(hrPayrollRepo.observePayrollRuns(superAdmin).first().none { it.employeeId == removableEmp.id })
+        assertTrue(authRepo.observeAuditLogs(superAdmin).first().any { it.action == "DELETE_EMPLOYEE" && it.recordId == removableEmp.id })
+    }
 }
